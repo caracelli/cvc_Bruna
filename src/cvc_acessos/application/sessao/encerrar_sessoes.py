@@ -15,7 +15,7 @@ import os
 import subprocess
 import time
 
-from caminhos import PERFIL, MARCADOR_PERFIL
+from cvc_acessos.infrastructure.sistema.caminhos import PERFIL, MARCADOR_PERFIL
 
 PORTA_CDP = "http://127.0.0.1:9222"
 URL_LOGOUT_MS = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"

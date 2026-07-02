@@ -1,0 +1,35 @@
+name: Release (pacote de deploy)
+
+# CD: ao criar uma tag vX.Y.Z, monta o ZIP de deploy e publica no Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Montar pacote de deploy
+        run: |
+          set -e
+          PKG=dist/cvc_gestao_acessos
+          mkdir -p "$PKG"
+          cp -r src "$PKG"/
+          cp requirements.txt "$PKG"/ 2>/dev/null || true
+          cp config.example.xml "$PKG"/ 2>/dev/null || true
+          cp README.md "$PKG"/ 2>/dev/null || true
+          cp run.py "$PKG"/ 2>/dev/null || true
+          cp pyproject.toml "$PKG"/ 2>/dev/null || true
+          # config.xml de deploy: copia o exemplo (sem credenciais)
+          cp config.example.xml "$PKG"/config.xml
+          cd dist && zip -r cvc_gestao_acessos.zip cvc_gestao_acessos
+
+      - name: Publicar no GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/cvc_gestao_acessos.zip

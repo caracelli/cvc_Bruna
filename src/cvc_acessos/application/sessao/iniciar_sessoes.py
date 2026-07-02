@@ -26,11 +26,11 @@ from urllib.request import urlopen
 from playwright.sync_api import sync_playwright
 
 # Reaproveita a deteccao de login ja validada
-from checar_login import _esta_logado
-from credenciais import obter_outlook
-from login_outlook import login_outlook, _ja_logado, CredencialInvalida
-from login_jira import login_jira, jira_logado
-from winutil import trazer_edge_frente, esconder_edge
+from cvc_acessos.application.sessao.checar_login import _esta_logado
+from cvc_acessos.infrastructure.credenciais.credenciais import obter_outlook
+from cvc_acessos.infrastructure.outlook.login_outlook import login_outlook, _ja_logado, CredencialInvalida
+from cvc_acessos.infrastructure.jira.login_jira import login_jira, jira_logado
+from cvc_acessos.infrastructure.sistema.winutil import trazer_edge_frente, esconder_edge
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -39,9 +39,9 @@ except Exception:
 
 # ===========================  CONFIG  =======================================
 # Caminhos PORTAVEIS (detecta Edge + perfil isolado em %LOCALAPPDATA%)
-from caminhos import EDGE, PERFIL, PORTA, achar_edge
+from cvc_acessos.infrastructure.sistema.caminhos import EDGE, PERFIL, PORTA, achar_edge
 # URLs vem do config.xml (configuravel por cliente)
-from config_app import URL_OUTLOOK, URL_JIRA, INVISIVEL
+from cvc_acessos.infrastructure.config.config_app import URL_OUTLOOK, URL_JIRA, INVISIVEL
 
 # sinais positivos de sessao ativa (por portal)
 POS_OUTLOOK = ["div[role='treeitem']", "div[role='option']",
@@ -269,9 +269,9 @@ def _main_impl():
     # rodando isolado nao trava o login). Encerrado no fim.
     popup_proc = None
     try:
-        fp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "fechar_popups.py")
-        popup_proc = subprocess.Popen([sys.executable, fp, "--loop"])
+        popup_proc = subprocess.Popen(
+            [sys.executable, "-m",
+             "cvc_acessos.infrastructure.sistema.fechar_popups", "--loop"])
     except Exception:
         popup_proc = None
 

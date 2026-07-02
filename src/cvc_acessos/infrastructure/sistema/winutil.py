@@ -13,7 +13,7 @@ Seguro: nunca toca em outras janelas do usuario.
 import os
 import subprocess
 
-from caminhos import MARCADOR_PERFIL
+from cvc_acessos.infrastructure.sistema.caminhos import MARCADOR_PERFIL
 
 SW_HIDE = 0
 SW_SHOW = 5

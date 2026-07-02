@@ -263,7 +263,7 @@ def login_outlook(page, email, senha, log=print, timeout_mfa_s=240):
         if senha_enviada:
             aprovar = loc_aprovar_mfa(page)
             if aprovar is not None and (time.time() - ultimo_aprovar) > 25:
-                from winutil import trazer_edge_frente
+                from cvc_acessos.infrastructure.sistema.winutil import trazer_edge_frente
                 trazer_edge_frente()
                 log("   MFA: (re)enviando 'Aprovar uma solicitacao' (Authenticator)...")
                 try:
@@ -276,7 +276,7 @@ def login_outlook(page, email, senha, log=print, timeout_mfa_s=240):
 
         # 6) nada de campo -> provavelmente tela de MFA: aguardar voce
         if senha_enviada and not avisou_mfa:
-            from winutil import trazer_edge_frente
+            from cvc_acessos.infrastructure.sistema.winutil import trazer_edge_frente
             trazer_edge_frente()   # janela pra frente para ver o codigo
             log("   >> AGUARDANDO MFA: aprove no seu celular / digite o codigo.")
             avisou_mfa = True

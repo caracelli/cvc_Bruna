@@ -7,7 +7,9 @@ usa valores padrao (defaults) para nao quebrar.
 import os
 import xml.etree.ElementTree as ET
 
-ARQ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.xml")
+from cvc_acessos.infrastructure.sistema.caminhos import RAIZ
+
+ARQ = os.path.join(RAIZ, "config.xml")
 
 _root = None
 if os.path.exists(ARQ):

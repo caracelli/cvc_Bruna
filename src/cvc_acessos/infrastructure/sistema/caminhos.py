@@ -10,8 +10,23 @@ interferir no ambiente dele).
 
 import os
 import shutil
+from pathlib import Path
 
 PORTA = 9222
+
+
+def _achar_raiz():
+    """Raiz do projeto = pasta que contem config.example.xml / pyproject.toml.
+    E onde ficam os dados locais (config.xml, credenciais.xml, log)."""
+    p = Path(__file__).resolve()
+    for cand in [p, *p.parents]:
+        if (cand / "config.example.xml").exists() \
+                or (cand / "pyproject.toml").exists():
+            return cand
+    return Path.cwd()
+
+
+RAIZ = str(_achar_raiz())
 
 # Pasta dedicada (isolada) para o perfil do Edge de automacao.
 # Fica em %LOCALAPPDATA%\cvc_gestao_acessos\edge_profile (gravavel, por usuario).

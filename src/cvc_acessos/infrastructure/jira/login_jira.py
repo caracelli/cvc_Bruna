@@ -15,10 +15,10 @@ do modal do Jira fica desmarcada (nao mexemos nela).
 
 import time
 
-from login_outlook import (
+from cvc_acessos.infrastructure.outlook.login_outlook import (
     tratar_seletor_conta, _existe, loc_aprovar_mfa, _erro_credencial,
     CredencialInvalida,
-    SEL_EMAIL, SEL_SENHA, SEL_BOTAO, SEL_KMSI_NAO,
+    SEL_EMAIL, SEL_SENHA, SEL_KMSI_NAO,
 )
 
 # hosts de login (se a URL contiver isto, NAO esta logado no Jira)
@@ -57,7 +57,7 @@ BTN_MICROSOFT_SSO = (
 
 
 # URL da pagina de abertura de chamado (vem do config.xml)
-from config_app import URL_JIRA as JIRA_CREATE_URL
+from cvc_acessos.infrastructure.config.config_app import URL_JIRA as JIRA_CREATE_URL
 
 
 def jira_logado(page):
@@ -212,7 +212,7 @@ def login_jira(page, email, senha, log=print, timeout_s=200,
         if senha_ms_enviada:
             aprovar = loc_aprovar_mfa(page)
             if aprovar is not None and (time.time() - ultimo_aprovar) > 25:
-                from winutil import trazer_edge_frente
+                from cvc_acessos.infrastructure.sistema.winutil import trazer_edge_frente
                 trazer_edge_frente()
                 log("   MFA: (re)enviando 'Aprovar uma solicitacao' (Authenticator)...")
                 try:
@@ -225,7 +225,7 @@ def login_jira(page, email, senha, log=print, timeout_s=200,
 
         # nada reconhecido: pode ser a tela de MFA da Microsoft -> aguardar voce
         if senha_ms_enviada and not avisou_mfa:
-            from winutil import trazer_edge_frente
+            from cvc_acessos.infrastructure.sistema.winutil import trazer_edge_frente
             trazer_edge_frente()   # janela pra frente para ver o codigo
             log("   >> Se pedir MFA, aprove no celular / digite o codigo.")
             avisou_mfa = True

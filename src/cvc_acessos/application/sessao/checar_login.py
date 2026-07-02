@@ -6,7 +6,7 @@ USO:
     python checar_login.py
 
 Tambem e usado como TRAVA DE SEGURANCA pelo fluxo principal:
-    from checar_login import garantir_sessoes
+    from cvc_acessos.application.sessao.checar_login import garantir_sessoes
     browser, outlook, jira = garantir_sessoes()   # lanca erro se algo cair
 """
 
@@ -62,7 +62,6 @@ def _esta_logado(page, positivos):
 
 def checar(browser=None):
     """Retorna dict com o estado das duas sessoes."""
-    fechar = False
     if browser is None:
         p = sync_playwright().start()
         try:
@@ -76,7 +75,6 @@ def checar(browser=None):
                 pass
             raise
         browser._pw_session = p  # type: ignore[attr-defined]
-        fechar = False  # nao fechamos o Edge do usuario
 
     outlook, jira = _achar_abas(browser)
 

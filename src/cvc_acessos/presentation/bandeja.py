@@ -53,14 +53,14 @@ def _patch_menu_clique_esquerdo():
 
 _patch_menu_clique_esquerdo()
 
-import iniciar_sessoes
-import fluxo
-import config_app
-from encerrar_sessoes import logoff_completo
-from winutil import mostrar_edge, esconder_edge
+import cvc_acessos.application.sessao.iniciar_sessoes as iniciar_sessoes
+import cvc_acessos.application.processar_acessos as fluxo
+import cvc_acessos.infrastructure.config.config_app as config_app
+from cvc_acessos.application.sessao.encerrar_sessoes import logoff_completo
+from cvc_acessos.infrastructure.sistema.winutil import mostrar_edge, esconder_edge
+from cvc_acessos.infrastructure.sistema.caminhos import RAIZ
 
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "cvc_bandeja.log")
+LOG_FILE = os.path.join(RAIZ, "cvc_bandeja.log")
 INTERVALO_S = max(60, config_app.INTERVALO_MIN * 60)
 
 # ----- estado compartilhado -----
@@ -241,9 +241,8 @@ def on_config(icon, item):
     Alteracoes salvas valem no PROXIMO inicio do app (config lido na abertura)."""
     log("Abrindo Configuracoes...")
     try:
-        form = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "config_form.py")
-        subprocess.Popen([sys.executable, form])
+        subprocess.Popen([sys.executable, "-m",
+                          "cvc_acessos.presentation.form_config"])
     except Exception as e:
         log(f"Nao consegui abrir o form: {e}")
 

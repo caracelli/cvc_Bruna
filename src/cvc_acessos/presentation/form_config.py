@@ -8,14 +8,15 @@ Formulario de configuracao (tkinter) para o config.xml.
 Uso: python config_form.py
 """
 import os
-import sys
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-ARQ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.xml")
+from cvc_acessos.infrastructure.sistema.caminhos import RAIZ
+
+ARQ = os.path.join(RAIZ, "config.xml")
 
 
 # -------------------- leitura dos valores atuais --------------------

@@ -12,7 +12,7 @@ Funcoes principais:
     ler_emails(page, limite)        -> retorna lista de dicts com os e-mails
 
 Uso tipico:
-    from outlook_web import conectar, abrir_pasta, ler_emails
+    from cvc_acessos.infrastructure.outlook.outlook_web import conectar, abrir_pasta, ler_emails
     browser, page = conectar()
     abrir_pasta(page, "Gestão de Acessos")
     for e in ler_emails(page, 20):
@@ -133,14 +133,14 @@ def abrir_inbox_compartilhada(page, nome_caixa, timeout_ms=8000):
     while time.time() < fim:
         _expandir_colapsados(page)
         tree, labels = _arvore_labels(page)
-        idx_hdr = next((i for i, l in labels if alvo in l.lower()), None)
+        idx_hdr = next((i for i, lbl in labels if alvo in lbl.lower()), None)
         if idx_hdr is not None:
             # 1a subpasta de entrada DEPOIS do cabecalho da caixa
-            for i, l in labels:
-                if i > idx_hdr and any(t in l.lower() for t in inbox_termos):
+            for i, lbl in labels:
+                if i > idx_hdr and any(t in lbl.lower() for t in inbox_termos):
                     tree.nth(i).click()
                     _esperar_lista(page, timeout_ms)
-                    return l
+                    return lbl
         time.sleep(1.5)
     raise RuntimeError(
         f"Nao achei a Caixa de Entrada da caixa '{nome_caixa}'. "
@@ -158,13 +158,13 @@ def abrir_subpasta(page, nome_caixa, subpasta, timeout_ms=8000):
     while time.time() < fim:
         _expandir_colapsados(page)
         tree, labels = _arvore_labels(page)
-        idx_hdr = next((i for i, l in labels if alvo in l.lower()), None)
+        idx_hdr = next((i for i, lbl in labels if alvo in lbl.lower()), None)
         ini = (idx_hdr + 1) if idx_hdr is not None else 0
-        for i, l in labels:
-            if i >= ini and sub in l.lower():
+        for i, lbl in labels:
+            if i >= ini and sub in lbl.lower():
                 tree.nth(i).click()
                 _esperar_lista(page, timeout_ms)
-                return l
+                return lbl
         time.sleep(1.5)
     raise RuntimeError(
         f"Nao achei a subpasta '{subpasta}' da caixa '{nome_caixa}'. "

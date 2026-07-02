@@ -16,10 +16,11 @@ import xml.etree.ElementTree as ET
 
 import keyring
 
+from cvc_acessos.infrastructure.sistema.caminhos import RAIZ
+
 SERVICO = "cvc-gestao-acessos"
 CHAVE_USER = "outlook::user"   # guarda QUAL e-mail usar
-ARQ_XML = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "credenciais.xml")
+ARQ_XML = os.path.join(RAIZ, "credenciais.xml")
 
 
 def _ler_xml():
@@ -46,7 +47,7 @@ def salvar_outlook(email, senha):
 def obter_outlook():
     # 1) config.xml centralizado (prioridade)
     try:
-        from config_app import OUTLOOK_EMAIL, OUTLOOK_SENHA
+        from cvc_acessos.infrastructure.config.config_app import OUTLOOK_EMAIL, OUTLOOK_SENHA
         if OUTLOOK_EMAIL and OUTLOOK_SENHA:
             return OUTLOOK_EMAIL, OUTLOOK_SENHA
     except Exception:
