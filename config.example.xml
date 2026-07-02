@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MODELO de configuracao. Copie este arquivo para 'config.xml' e preencha
+  com os dados reais (inclusive a senha). O config.xml fica no .gitignore.
+-->
+<config>
+
+  <outlook>
+    <email>seu.email@empresa.com.br</email>
+    <senha>SUA_SENHA_AQUI</senha>
+    <url>https://outlook.office.com/mail/</url>
+    <caixa>Gestão de Acessos</caixa>
+  </outlook>
+
+  <jira>
+    <url_chamado>https://SEU_TENANT.atlassian.net/servicedesk/customer/portal/000/group/000/create/000</url_chamado>
+    <tipo_solicitud>forms</tipo_solicitud>
+    <cor_titulo>Verde-azulado forte</cor_titulo>
+    <categoria_prefixo>JIRA -</categoria_prefixo>
+  </jira>
+
+  <fluxo>
+    <remetente_filtro>Microsoft Forms</remetente_filtro>
+    <subpasta_destino>Finalizado</subpasta_destino>
+    <so_nao_lidos>true</so_nao_lidos>
+    <marcar_como_lido>true</marcar_como_lido>
+    <encerrar_sessoes_no_fim>true</encerrar_sessoes_no_fim>
+    <dry_run>true</dry_run>
+    <intervalo_min>5</intervalo_min>
+    <invisivel>true</invisivel>
+  </fluxo>
+
+  <!-- Encaminhamento do e-mail pro grupo responsavel (com nº do chamado) -->
+  <!-- destinatarios: separados por virgula. Placeholders: {ticket} {assunto} {link} -->
+  <encaminhamento>
+    <ativo>true</ativo>
+    <destinatarios>time-acessos@empresa.com.br</destinatarios>
+    <assunto_template>{ticket} - {assunto}</assunto_template>
+    <!-- prefixo_corpo: texto antes do numero do chamado (que fica clicavel/hyperlink) -->
+    <prefixo_corpo>Chamado aberto: </prefixo_corpo>
+    <separador>--- Mensagem original (Microsoft Forms) abaixo ---</separador>
+  </encaminhamento>
+
+</config>

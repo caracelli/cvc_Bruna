@@ -1,0 +1,18 @@
+# Cache de token (NUNCA versionar - contém credenciais de acesso)
+token_cache.bin
+
+# Credenciais/config locais (NUNCA versionar - senha em texto puro)
+credenciais.xml
+config.xml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Pacotes de deploy
+*.zip
+
+# Logs
+*.log
