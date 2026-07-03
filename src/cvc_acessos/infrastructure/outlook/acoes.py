@@ -119,21 +119,43 @@ def mover_email(outlook, indice, pasta):
     time.sleep(3)
 
 
+def _toggle_leitura(outlook, indice, titulos):
+    """Clica o botao de alternancia lido/nao-lido da LINHA. O botao as vezes
+    so aparece no HOVER -> passa o mouse antes."""
+    row = outlook.locator("div[role='option']").nth(indice)
+    try:
+        row.scroll_into_view_if_needed(timeout=2000)
+    except Exception:
+        pass
+    try:
+        row.hover()
+        time.sleep(0.3)
+    except Exception:
+        pass
+    btn = row.locator(titulos)
+    if btn.count() > 0:
+        try:
+            btn.first.click()
+            return True
+        except Exception:
+            pass
+    return False
+
+
 def marcar_lido(outlook, indice):
     """Marca o e-mail como lido (botao de alternancia da linha)."""
-    row = outlook.locator("div[role='option']").nth(indice)
-    btn = row.locator("[title='Marcar como lido'], [title='Mark as read']")
-    if btn.count() > 0:
-        btn.first.click()
+    return _toggle_leitura(
+        outlook, indice,
+        "[title='Marcar como lido'], [title='Mark as read'], "
+        "button[aria-label*='como lido' i], button[aria-label*='as read' i]")
 
 
 def marcar_nao_lido(outlook, indice):
-    """Marca o e-mail como NAO lido (usado p/ restaurar no DRY-RUN)."""
-    row = outlook.locator("div[role='option']").nth(indice)
-    btn = row.locator(
-        "[title='Marcar como não lido'], [title='Mark as unread']")
-    if btn.count() > 0:
-        btn.first.click()
+    """Marca o e-mail como NAO lido (restaura o estado no DRY-RUN/teste)."""
+    return _toggle_leitura(
+        outlook, indice,
+        "[title='Marcar como não lido'], [title='Mark as unread'], "
+        "button[aria-label*='não lido' i], button[aria-label*='as unread' i]")
 
 
 def _inserir_url_no_dialogo(outlook, link):

@@ -18,6 +18,7 @@ o app estiver rodando (a sessao dura enquanto o Edge vive).
 
 import os
 import sys
+import contextlib
 import subprocess
 import threading
 from datetime import datetime
@@ -104,6 +105,25 @@ def log(msg):
         pass
 
 
+class _LogWriter:
+    """file-like: no .exe (--windowed) o stdout vai pro devnull, entao o
+    print() do FLUXO se perderia. Isto captura cada linha e grava no LOG_FILE
+    (via log()), pra 'Ver log' mostrar o passo-a-passo do fluxo."""
+
+    def __init__(self):
+        self._buf = ""
+
+    def write(self, s):
+        self._buf += s
+        while "\n" in self._buf:
+            linha, self._buf = self._buf.split("\n", 1)
+            if linha.strip():
+                log(linha.rstrip())
+
+    def flush(self):
+        pass
+
+
 # ----- icone -----
 def _img(cor):
     img = Image.new("RGB", (64, 64), (255, 255, 255))
@@ -163,9 +183,11 @@ def ciclo():
     pw = None
     ok = False
     try:
-        browser, outlook, jira = fluxo._garantir_sessoes()
-        pw = getattr(browser, "_pw_session", None)
-        enc, proc = fluxo.processar(outlook, jira)
+        # captura o print() interno do fluxo -> LOG_FILE (no .exe stdout=devnull)
+        with contextlib.redirect_stdout(_LogWriter()):
+            browser, outlook, jira = fluxo._garantir_sessoes()
+            pw = getattr(browser, "_pw_session", None)
+            enc, proc = fluxo.processar(outlook, jira)
         estado["ultima"] = datetime.now().strftime("%H:%M")
         estado["encontrados"] = enc
         estado["processados"] = proc

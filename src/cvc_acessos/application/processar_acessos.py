@@ -26,11 +26,11 @@ from cvc_acessos.application.sessao.checar_login import checar
 from cvc_acessos.infrastructure.credenciais.credenciais import obter_outlook
 from cvc_acessos.infrastructure.jira.login_jira import login_jira
 from cvc_acessos.infrastructure.outlook.outlook_web import (
-    abrir_inbox_compartilhada, ler_emails,
+    abrir_inbox_compartilhada, ler_emails, pesquisar_forms, limpar_pesquisa,
 )
 from cvc_acessos.domain.regras import tem_cat_jira, casa_remetente
 from cvc_acessos.infrastructure.outlook.acoes import (
-    extrair_email, marcar_lido, marcar_nao_lido, mover_email, encaminhar_email,
+    extrair_email, marcar_lido, mover_email, encaminhar_email,
 )
 from cvc_acessos.infrastructure.jira.chamado import (
     preencher_formulario, enviar_e_capturar_codigo,
@@ -88,79 +88,86 @@ def _filtrar(outlook):
     ]
 
 
-def _plano(n, dados):
-    print(f"\n  --- E-MAIL {n} ---")
-    print(f"    Resumen     : {dados['titulo']}")
-    print(f"    Corpo       : {dados['corpo']}")
-    print(f"    Link        : {dados['link'][:70]}...")
-    print("    Tipo        : Forms")
-
-
 def processar(outlook, jira):
     """UM ciclo: abre a caixa, filtra e processa. NAO faz login nem logoff.
     Retorna (encontrados, processados)."""
     aberto = abrir_inbox_compartilhada(outlook, CAIXA)
     print(f">> Caixa de Entrada: {aberto}")
 
-    if DRY_RUN:
-        alvo = _filtrar(outlook)
-        print(f">> {len(alvo)} e-mail(s) Microsoft Forms NAO lidos.\n")
-        for n, e in enumerate(alvo, 1):
-            dados = extrair_email(outlook, e["indice"])
-            _plano(n, dados)
-            jira.bring_to_front()
-            ok = preencher_formulario(jira, dados)
-            print(f"    Form Jira   : {'preenchido (preview)' if ok else 'FALHOU'}")
-            print("    [DRY-RUN] enviaria o chamado + pegaria o codigo")
-            if ENCAMINHAR_ATIVO and ENCAMINHAR_DESTINATARIOS:
-                print(f"    [DRY-RUN] encaminharia p/ {ENCAMINHAR_DESTINATARIOS} "
-                      f"(assunto '<ticket> - {dados['titulo']}', nº clicavel)")
-            print(f"    [DRY-RUN] mover p/ '{SUBPASTA_DESTINO}' + marcar lido")
-            # DRY-RUN NAO deve alterar a caixa: abrir o e-mail marcou como lido
-            # (painel de leitura) -> restaura NAO lido.
-            if e["nao_lido"]:
-                outlook.bring_to_front()
-                marcar_nao_lido(outlook, e["indice"])
-        print("\n>> DRY-RUN: nada enviado/movido/alterado (nao lidos restaurados).")
-        return len(alvo), 0
-
-    # EXECUCAO REAL: processa o 1o da fila ate acabar (mover tira da lista)
-    encontrados = len(_filtrar(outlook))
-    processados = 0
-    while True:
-        alvo = _filtrar(outlook)
-        if not alvo:
+    # A caixa COMPARTILHADA carrega de forma ASSINCRONA (a lista aparece uns
+    # segundos depois de abrir). Sem esperar, _filtrar leria 0. Espera ~30s.
+    for _ in range(15):
+        if ler_emails(outlook, 5):
             break
-        e = alvo[0]
-        dados = extrair_email(outlook, e["indice"])
-        print(f"\n>> Processando: {dados['titulo']}")
-        jira.bring_to_front()
-        if not preencher_formulario(jira, dados):
-            print("   [ERRO] nao preencheu o formulario; parando.")
-            break
-        codigo = enviar_e_capturar_codigo(jira)
-        link = jira.url.split("?")[0]                # URL do chamado criado
-        print(f"   Chamado criado: {codigo}  ({link})")
-        outlook.bring_to_front()
-        # NOTIFICA o grupo: encaminha com o nº do chamado no assunto + link
-        # clicavel no corpo (sem categoria -> nao acumula lista-mestre).
-        if ENCAMINHAR_ATIVO and ENCAMINHAR_DESTINATARIOS:
-            assunto = ENCAMINHAR_ASSUNTO.format(ticket=codigo,
-                                                assunto=dados["titulo"])
-            encaminhar_email(outlook, e["indice"], ENCAMINHAR_DESTINATARIOS,
-                             assunto, codigo, link, ENCAMINHAR_PREFIXO,
-                             ENCAMINHAR_SEPARADOR)
-            print(f"   Encaminhado p/ {len(ENCAMINHAR_DESTINATARIOS)} "
-                  f"destinatario(s).")
-        if MARCAR_COMO_LIDO:
-            marcar_lido(outlook, e["indice"])
-        mover_email(outlook, e["indice"], SUBPASTA_DESTINO)
-        processados += 1
-        jira.goto(URL_JIRA, wait_until="domcontentloaded")
         time.sleep(2)
 
-    print(f"\n>> {processados} e-mail(s) processado(s).")
-    return encontrados, processados
+    # Isola a fila de trabalho: PESQUISA 'Microsoft Forms' com escopo 'Pasta
+    # atual'. A lista passa a ter SO os Forms do Inbox (sem outros remetentes,
+    # sem os processados de 'Finalizados', sem virtualizacao). O nao-lido
+    # continua no _filtrar (SO_NAO_LIDOS). limpar_pesquisa restaura a caixa.
+    n = pesquisar_forms(outlook, REMETENTE_FILTRO or "Microsoft Forms")
+    print(f">> Pesquisa '{REMETENTE_FILTRO}' (pasta atual): {n} resultado(s)")
+
+    try:
+        if DRY_RUN:
+            # DRY-RUN 100% NAO-INVASIVO: NAO abre os e-mails (abrir marca como
+            # lido no painel de leitura). So lista, da propria linha, o que
+            # SERIA feito. Sem tocar no Jira e sem alterar a caixa.
+            alvo = _filtrar(outlook)
+            print(f">> {len(alvo)} e-mail(s) Microsoft Forms NAO lidos "
+                  "que SERIAM processados:\n")
+            for n, e in enumerate(alvo, 1):
+                print(f"  {n}. {e['resumo'][:70]}")
+                print("     [DRY-RUN] criaria o chamado no Jira + pegaria o codigo")
+                if ENCAMINHAR_ATIVO and ENCAMINHAR_DESTINATARIOS:
+                    print(f"     [DRY-RUN] encaminharia p/ {ENCAMINHAR_DESTINATARIOS} "
+                          "(nº do chamado no assunto + link clicavel)")
+                print(f"     [DRY-RUN] marcaria lido + moveria p/ '{SUBPASTA_DESTINO}'")
+            print("\n>> DRY-RUN: nada aberto/enviado/movido. A caixa NAO foi alterada.")
+            return len(alvo), 0
+
+        # EXECUCAO REAL: processa o 1o da fila ate acabar (mover tira da lista)
+        encontrados = len(_filtrar(outlook))
+        processados = 0
+        while True:
+            # a cada volta re-le os resultados da pesquisa: ao marcar lido +
+            # mover, o e-mail deixa de ser 'Forms nao lido na pasta atual' e sai
+            # da fila -> nunca reprocessa e nao perde nenhum.
+            alvo = _filtrar(outlook)
+            if not alvo:
+                break
+            e = alvo[0]
+            dados = extrair_email(outlook, e["indice"])
+            print(f"\n>> Processando: {dados['titulo']}")
+            jira.bring_to_front()
+            if not preencher_formulario(jira, dados):
+                print("   [ERRO] nao preencheu o formulario; parando.")
+                break
+            codigo = enviar_e_capturar_codigo(jira)
+            link = jira.url.split("?")[0]                # URL do chamado criado
+            print(f"   Chamado criado: {codigo}  ({link})")
+            outlook.bring_to_front()
+            # NOTIFICA o grupo: encaminha com o nº do chamado no assunto + link
+            # clicavel no corpo (sem categoria -> nao acumula lista-mestre).
+            if ENCAMINHAR_ATIVO and ENCAMINHAR_DESTINATARIOS:
+                assunto = ENCAMINHAR_ASSUNTO.format(ticket=codigo,
+                                                    assunto=dados["titulo"])
+                encaminhar_email(outlook, e["indice"], ENCAMINHAR_DESTINATARIOS,
+                                 assunto, codigo, link, ENCAMINHAR_PREFIXO,
+                                 ENCAMINHAR_SEPARADOR)
+                print(f"   Encaminhado p/ {len(ENCAMINHAR_DESTINATARIOS)} "
+                      f"destinatario(s).")
+            if MARCAR_COMO_LIDO:
+                marcar_lido(outlook, e["indice"])
+            mover_email(outlook, e["indice"], SUBPASTA_DESTINO)
+            processados += 1
+            jira.goto(URL_JIRA, wait_until="domcontentloaded")
+            time.sleep(2)
+
+        print(f"\n>> {processados} e-mail(s) processado(s).")
+        return encontrados, processados
+    finally:
+        limpar_pesquisa(outlook, CAIXA)
 
 
 def main():

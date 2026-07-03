@@ -208,6 +208,71 @@ def _esperar_lista(page, timeout_ms=8000):
         time.sleep(0.3)
 
 
+def pesquisar_forms(page, termo="Microsoft Forms"):
+    """Pesquisa 'termo' (o remetente Microsoft Forms) com escopo 'PASTA ATUAL'.
+
+    Isola a fila de trabalho: a lista passa a conter SO os e-mails do Forms
+    DA PASTA ABERTA (Inbox), sem os outros remetentes e sem os ja processados
+    de 'Finalizados'. Resolve a lista virtualizada (o conjunto vira pequeno) e
+    garante que nenhum Forms antigo abaixo da dobra fique de fora.
+
+    IMPORTANTE: a pasta-alvo (Inbox compartilhada) deve estar ABERTA antes de
+    chamar (o escopo 'Pasta atual' se refere a ela). Retorna a contagem de
+    linhas de resultado.
+    """
+    box = page.locator("input[aria-label='Pesquisar'], "
+                       "input[placeholder='Pesquisar']").first
+    if box.count() == 0:
+        return page.locator("div[role='option']").count()
+    box.click()
+    time.sleep(0.8)
+    box.fill(termo)
+    time.sleep(0.6)
+    page.keyboard.press("Enter")
+    time.sleep(2.5)
+    # troca o escopo 'Todas as pastas...' -> 'Pasta atual'
+    try:
+        scope = page.locator("button:has-text('Todas as pastas')").first
+        if scope.count() > 0 and scope.is_visible():
+            scope.click()
+            time.sleep(1.2)
+            opt = page.get_by_role("menuitem").filter(has_text="Pasta atual")
+            if opt.count() > 0 and opt.first.is_visible():
+                opt.first.click()
+                _esperar_lista(page)
+                time.sleep(1.5)
+    except Exception:
+        pass
+    return page.locator("div[role='option']").count()
+
+
+def limpar_pesquisa(page, nome_caixa=None):
+    """Sai do modo de pesquisa e volta a lista normal da pasta. O jeito mais
+    confiavel de restaurar e REABRIR a pasta; se 'nome_caixa' for dado, reabre
+    a Caixa de Entrada compartilhada."""
+    try:
+        for sel in ("button[aria-label*='escartar' i]",
+                    "button[aria-label*='echar a pesquisa' i]",
+                    "button[aria-label*='impar' i]",
+                    "button[aria-label*='lose search' i]"):
+            b = page.locator(sel)
+            if b.count() > 0 and b.first.is_visible():
+                b.first.click()
+                time.sleep(0.8)
+                break
+        else:
+            page.keyboard.press("Escape")
+            time.sleep(0.4)
+            page.keyboard.press("Escape")
+    except Exception:
+        pass
+    if nome_caixa:
+        try:
+            abrir_inbox_compartilhada(page, nome_caixa)
+        except Exception:
+            pass
+
+
 def _parse_aria(aria):
     """Quebra o aria-label de uma linha de e-mail em campos uteis.
 
