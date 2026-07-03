@@ -217,8 +217,19 @@ def main():
         except ValueError:
             messagebox.showerror("Erro", "Intervalo (min) precisa ser um número.")
             return
-        if not vals["outlook_email"].strip():
-            messagebox.showerror("Erro", "E-mail do Outlook é obrigatório.")
+        # CAMPOS OBRIGATORIOS: nao deixa salvar sem preencher
+        obrig = [
+            ("outlook_email", "E-mail do Outlook"),
+            ("outlook_senha", "Senha do Outlook"),
+        ]
+        # destinatarios so e obrigatorio se o encaminhamento estiver ativo
+        if _b(vals.get("enc_ativo", "false")) == "true":
+            obrig.append(("enc_dest", "Destinatários do encaminhamento"))
+        faltando = [rot for k, rot in obrig if not str(vals.get(k, "")).strip()]
+        if faltando:
+            messagebox.showerror(
+                "Campos obrigatórios",
+                "Preencha antes de salvar:\n\n  - " + "\n  - ".join(faltando))
             return
         try:
             _salvar(vals)

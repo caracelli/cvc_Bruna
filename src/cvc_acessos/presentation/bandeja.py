@@ -77,14 +77,18 @@ disparar = threading.Event()      # forca um ciclo imediato ("Verificar agora")
 icone = None
 
 
-def _abrir_form_config():
+def _abrir_form_config(esperar=False):
     """Abre o formulario de config em processo separado (frozen-aware).
-    No .exe, sys.executable e o proprio exe -> usa 'exe --config'."""
+    No .exe, sys.executable e o proprio exe -> usa 'exe --config'.
+    esperar=True bloqueia ate o form fechar (usado no setup inicial)."""
     if getattr(sys, "frozen", False):
         cmd = [sys.executable, "--config"]
     else:
         cmd = [sys.executable, "-m", "cvc_acessos.presentation.form_config"]
-    subprocess.Popen(cmd, creationflags=0x08000000)   # CREATE_NO_WINDOW
+    p = subprocess.Popen(cmd, creationflags=0x08000000)   # CREATE_NO_WINDOW
+    if esperar:
+        p.wait()
+    return p
 
 
 def log(msg):
@@ -332,18 +336,44 @@ def main():
             from tkinter import messagebox
             r = tk.Tk()
             r.withdraw()
-            messagebox.showwarning(
-                "Configuração necessária",
-                "Faltam dados na configuração:\n\n  - " + "\n  - ".join(faltam) +
-                "\n\nPreencha o formulário que vai abrir, clique em Salvar "
-                "e reabra o aplicativo.")
+            messagebox.showinfo(
+                "Configuração inicial",
+                "Faltam dados:\n\n  - " + "\n  - ".join(faltam) +
+                "\n\nVou abrir o formulário. Preencha e clique Salvar — o "
+                "aplicativo inicia sozinho em seguida.")
             r.destroy()
         except Exception:
             pass
         try:
-            _abrir_form_config()
+            _abrir_form_config(esperar=True)      # espera o form fechar
         except Exception as e:  # noqa: BLE001
             log(f"Nao consegui abrir o form: {e}")
+        # recarrega o config do disco e reavalia
+        try:
+            import importlib
+            importlib.reload(config_app)
+        except Exception:
+            pass
+        if not _config_faltando():
+            # ok agora -> reinicia numa instancia NOVA (recarrega tudo)
+            log("Config salva -> reiniciando o app automaticamente.")
+            try:
+                subprocess.Popen([sys.executable] + sys.argv[1:],
+                                 creationflags=0x08000000)
+            except Exception as e:  # noqa: BLE001
+                log(f"Nao consegui reiniciar: {e}")
+        else:
+            try:
+                import tkinter as tk
+                from tkinter import messagebox
+                r = tk.Tk()
+                r.withdraw()
+                messagebox.showinfo(
+                    "Configuração",
+                    "Ainda faltam dados. Reabra o aplicativo quando preencher.")
+                r.destroy()
+            except Exception:
+                pass
         return
 
     log(f"App iniciado. Intervalo {config_app.INTERVALO_MIN} min | "
