@@ -138,7 +138,9 @@ def abrir_edge_se_preciso(url_inicial):
     if os.name == "nt":
         CREATE_NEW_PROCESS_GROUP = 0x00000200
         CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-        creationflags = CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB
+        CREATE_NO_WINDOW = 0x08000000       # nao pisca console
+        creationflags = (CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB
+                         | CREATE_NO_WINDOW)
     def _lancar(exe):
         cmd = [exe] + args[1:]
         try:
@@ -274,7 +276,7 @@ def _main_impl():
         else:
             cmd = [sys.executable, "-m",
                    "cvc_acessos.infrastructure.sistema.fechar_popups", "--loop"]
-        popup_proc = subprocess.Popen(cmd)
+        popup_proc = subprocess.Popen(cmd, creationflags=0x08000000)  # no window
     except Exception:
         popup_proc = None
 

@@ -26,7 +26,8 @@ def _pids_edge_automacao():
               f"Where-Object {{ $_.CommandLine -like '*{MARCADOR_PERFIL}*' }} | "
               "Select-Object -ExpandProperty ProcessId")
         out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                             capture_output=True, text=True, timeout=10)
+                             capture_output=True, text=True, timeout=10,
+                             creationflags=0x08000000)   # CREATE_NO_WINDOW
         return set(int(x) for x in out.stdout.split() if x.strip().isdigit())
     except Exception:
         return set()

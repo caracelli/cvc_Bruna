@@ -84,7 +84,7 @@ def _abrir_form_config():
         cmd = [sys.executable, "--config"]
     else:
         cmd = [sys.executable, "-m", "cvc_acessos.presentation.form_config"]
-    subprocess.Popen(cmd)
+    subprocess.Popen(cmd, creationflags=0x08000000)   # CREATE_NO_WINDOW
 
 
 def log(msg):

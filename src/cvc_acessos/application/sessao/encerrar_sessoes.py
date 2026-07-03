@@ -55,7 +55,7 @@ def fechar_edge_automacao(log=print):
         "Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }"
     )
     subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                   capture_output=True)
+                   capture_output=True, creationflags=0x08000000)  # CREATE_NO_WINDOW
     time.sleep(1)
     log("   Edge de automacao fechado.")
 
