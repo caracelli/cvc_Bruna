@@ -107,18 +107,34 @@ def log(msg):
 
 class _LogWriter:
     """file-like: no .exe (--windowed) o stdout vai pro devnull, entao o
-    print() do FLUXO se perderia. Isto captura cada linha e grava no LOG_FILE
-    (via log()), pra 'Ver log' mostrar o passo-a-passo do fluxo."""
+    print() do FLUXO se perderia. Grava cada linha DIRETO no LOG_FILE.
+
+    CRITICO: NAO chamar log() aqui. Este writer FICA no lugar do sys.stdout
+    durante o fluxo (redirect_stdout); log() faz print(), que voltaria pra ca
+    -> recursao infinita (foi o bug do log de 120MB). Escrita direta = sem
+    recursao. Guard reentrante por seguranca."""
 
     def __init__(self):
         self._buf = ""
+        self._dentro = False
 
     def write(self, s):
-        self._buf += s
-        while "\n" in self._buf:
-            linha, self._buf = self._buf.split("\n", 1)
-            if linha.strip():
-                log(linha.rstrip())
+        if self._dentro:            # evita reentrancia (recursao)
+            return
+        self._dentro = True
+        try:
+            self._buf += s
+            while "\n" in self._buf:
+                linha, self._buf = self._buf.split("\n", 1)
+                if linha.strip():
+                    try:
+                        with open(LOG_FILE, "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.now():%d/%m %H:%M:%S}  "
+                                    f"{linha.rstrip()}\n")
+                    except Exception:
+                        pass
+        finally:
+            self._dentro = False
 
     def flush(self):
         pass
