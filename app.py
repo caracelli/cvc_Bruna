@@ -12,6 +12,13 @@ import os
 import sys
 import time
 
+# No modo --windowed (.exe sem console) o PyInstaller deixa stdout/stderr = None;
+# qualquer print() do app quebraria. Redireciona pra devnull pra nao crashar.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
 # rodando do codigo (nao congelado): garante src/ no path
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),

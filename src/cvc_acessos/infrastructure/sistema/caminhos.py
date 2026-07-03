@@ -18,10 +18,16 @@ PORTA = 9222
 
 def _achar_raiz():
     """Onde ficam os dados locais (config.xml, credenciais.xml, log).
-    - .exe (PyInstaller/frozen): a PROPRIA pasta do executavel.
+    - .exe (frozen): subpasta 'dados/' AO LADO do executavel (assim a pasta
+      principal fica so com o .exe e o config nao e apagado por engano).
     - codigo: a pasta que contem config.example.xml / pyproject.toml."""
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
+        d = Path(sys.executable).resolve().parent / "dados"
+        try:
+            d.mkdir(exist_ok=True)
+        except Exception:
+            pass
+        return d
     p = Path(__file__).resolve()
     for cand in [p, *p.parents]:
         if (cand / "config.example.xml").exists() \

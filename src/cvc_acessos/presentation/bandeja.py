@@ -77,6 +77,16 @@ disparar = threading.Event()      # forca um ciclo imediato ("Verificar agora")
 icone = None
 
 
+def _abrir_form_config():
+    """Abre o formulario de config em processo separado (frozen-aware).
+    No .exe, sys.executable e o proprio exe -> usa 'exe --config'."""
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--config"]
+    else:
+        cmd = [sys.executable, "-m", "cvc_acessos.presentation.form_config"]
+    subprocess.Popen(cmd)
+
+
 def log(msg):
     linha = f"{datetime.now():%d/%m %H:%M:%S}  {msg}"
     try:
@@ -84,7 +94,10 @@ def log(msg):
             f.write(linha + "\n")
     except Exception:
         pass
-    print(linha)
+    try:
+        print(linha)          # em --windowed o stdout pode ser None
+    except Exception:
+        pass
 
 
 # ----- icone -----
@@ -241,11 +254,7 @@ def on_config(icon, item):
     Alteracoes salvas valem no PROXIMO inicio do app (config lido na abertura)."""
     log("Abrindo Configuracoes...")
     try:
-        if getattr(sys, "frozen", False):      # dentro do .exe (PyInstaller)
-            cmd = [sys.executable, "--config"]
-        else:
-            cmd = [sys.executable, "-m", "cvc_acessos.presentation.form_config"]
-        subprocess.Popen(cmd)
+        _abrir_form_config()
     except Exception as e:
         log(f"Nao consegui abrir o form: {e}")
 
@@ -332,9 +341,7 @@ def main():
         except Exception:
             pass
         try:
-            form = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "config_form.py")
-            subprocess.Popen([sys.executable, form])
+            _abrir_form_config()
         except Exception as e:  # noqa: BLE001
             log(f"Nao consegui abrir o form: {e}")
         return
