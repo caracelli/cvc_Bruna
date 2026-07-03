@@ -30,7 +30,7 @@ from cvc_acessos.infrastructure.outlook.outlook_web import (
 )
 from cvc_acessos.domain.regras import tem_cat_jira, casa_remetente
 from cvc_acessos.infrastructure.outlook.acoes import (
-    extrair_email, marcar_lido, mover_email, encaminhar_email,
+    extrair_email, marcar_lido, marcar_nao_lido, mover_email, encaminhar_email,
 )
 from cvc_acessos.infrastructure.jira.chamado import (
     preencher_formulario, enviar_e_capturar_codigo,
@@ -116,7 +116,12 @@ def processar(outlook, jira):
                 print(f"    [DRY-RUN] encaminharia p/ {ENCAMINHAR_DESTINATARIOS} "
                       f"(assunto '<ticket> - {dados['titulo']}', nº clicavel)")
             print(f"    [DRY-RUN] mover p/ '{SUBPASTA_DESTINO}' + marcar lido")
-        print("\n>> DRY-RUN: nada enviado/movido/alterado.")
+            # DRY-RUN NAO deve alterar a caixa: abrir o e-mail marcou como lido
+            # (painel de leitura) -> restaura NAO lido.
+            if e["nao_lido"]:
+                outlook.bring_to_front()
+                marcar_nao_lido(outlook, e["indice"])
+        print("\n>> DRY-RUN: nada enviado/movido/alterado (nao lidos restaurados).")
         return len(alvo), 0
 
     # EXECUCAO REAL: processa o 1o da fila ate acabar (mover tira da lista)

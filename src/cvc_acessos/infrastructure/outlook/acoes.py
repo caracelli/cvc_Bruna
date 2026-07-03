@@ -127,6 +127,15 @@ def marcar_lido(outlook, indice):
         btn.first.click()
 
 
+def marcar_nao_lido(outlook, indice):
+    """Marca o e-mail como NAO lido (usado p/ restaurar no DRY-RUN)."""
+    row = outlook.locator("div[role='option']").nth(indice)
+    btn = row.locator(
+        "[title='Marcar como não lido'], [title='Mark as unread']")
+    if btn.count() > 0:
+        btn.first.click()
+
+
 def _inserir_url_no_dialogo(outlook, link):
     """No dialogo 'Inserir link' (Ctrl+K), preenche o campo de URL (#linkInput)
     e clica OK. O 'Exibir como' ja vem com o texto selecionado (o ticket)."""
