@@ -241,8 +241,11 @@ def on_config(icon, item):
     Alteracoes salvas valem no PROXIMO inicio do app (config lido na abertura)."""
     log("Abrindo Configuracoes...")
     try:
-        subprocess.Popen([sys.executable, "-m",
-                          "cvc_acessos.presentation.form_config"])
+        if getattr(sys, "frozen", False):      # dentro do .exe (PyInstaller)
+            cmd = [sys.executable, "--config"]
+        else:
+            cmd = [sys.executable, "-m", "cvc_acessos.presentation.form_config"]
+        subprocess.Popen(cmd)
     except Exception as e:
         log(f"Nao consegui abrir o form: {e}")
 

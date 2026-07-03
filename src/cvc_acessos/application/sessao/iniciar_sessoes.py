@@ -269,9 +269,12 @@ def _main_impl():
     # rodando isolado nao trava o login). Encerrado no fim.
     popup_proc = None
     try:
-        popup_proc = subprocess.Popen(
-            [sys.executable, "-m",
-             "cvc_acessos.infrastructure.sistema.fechar_popups", "--loop"])
+        if getattr(sys, "frozen", False):      # dentro do .exe (PyInstaller)
+            cmd = [sys.executable, "--fechar-popups"]
+        else:
+            cmd = [sys.executable, "-m",
+                   "cvc_acessos.infrastructure.sistema.fechar_popups", "--loop"]
+        popup_proc = subprocess.Popen(cmd)
     except Exception:
         popup_proc = None
 

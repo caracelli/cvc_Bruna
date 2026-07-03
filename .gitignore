@@ -16,3 +16,8 @@ venv/
 
 # Logs
 *.log
+
+# PyInstaller (build do .exe)
+build/
+dist/
+*.spec

@@ -10,14 +10,18 @@ interferir no ambiente dele).
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 PORTA = 9222
 
 
 def _achar_raiz():
-    """Raiz do projeto = pasta que contem config.example.xml / pyproject.toml.
-    E onde ficam os dados locais (config.xml, credenciais.xml, log)."""
+    """Onde ficam os dados locais (config.xml, credenciais.xml, log).
+    - .exe (PyInstaller/frozen): a PROPRIA pasta do executavel.
+    - codigo: a pasta que contem config.example.xml / pyproject.toml."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
     p = Path(__file__).resolve()
     for cand in [p, *p.parents]:
         if (cand / "config.example.xml").exists() \
