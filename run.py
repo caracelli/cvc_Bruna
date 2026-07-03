@@ -31,6 +31,19 @@ def _faltando():
     return [mod for mod in NECESSARIOS if importlib.util.find_spec(mod) is None]
 
 
+def _garantir_pip():
+    """Garante que o pip exista (algumas instalacoes do cliente vem SEM pip).
+    Usa o ensurepip (embutido no Python) pra criar o pip. Retorna True se ok."""
+    if importlib.util.find_spec("pip") is not None:
+        return True
+    print(">> pip nao encontrado; instalando via ensurepip (embutido)...")
+    try:
+        subprocess.run([sys.executable, "-m", "ensurepip", "--upgrade"])
+    except Exception as e:  # noqa: BLE001
+        print("   ensurepip falhou:", e)
+    return importlib.util.find_spec("pip") is not None
+
+
 def _instalar(faltam):
     print(">> Dependencias faltando:", ", ".join(faltam))
     print(">> Instalando (primeira execucao)... aguarde.\n")
@@ -48,6 +61,12 @@ def main():
     faltam = _faltando()
     # instala 1x e reinicia o processo (pra carregar os pacotes novos)
     if faltam and not os.environ.get("CVC_BOOTSTRAP_DONE"):
+        if not _garantir_pip():
+            print("\n[ERRO] pip indisponivel e o ensurepip nao criou o pip.")
+            print("Opcoes: (1) instale o pip nessa maquina, ou")
+            print("        (2) use a versao .exe standalone (nao precisa de "
+                  "Python/pip).")
+            sys.exit(1)
         _instalar(faltam)
         os.environ["CVC_BOOTSTRAP_DONE"] = "1"
         os.execv(sys.executable, [sys.executable, os.path.abspath(__file__),
