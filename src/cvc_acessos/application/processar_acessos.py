@@ -26,18 +26,21 @@ from cvc_acessos.application.sessao.checar_login import checar
 from cvc_acessos.infrastructure.credenciais.credenciais import obter_outlook
 from cvc_acessos.infrastructure.jira.login_jira import login_jira
 from cvc_acessos.infrastructure.outlook.outlook_web import (
-    abrir_inbox_compartilhada, ler_emails, pesquisar_forms, limpar_pesquisa,
+    abrir_inbox_compartilhada, abrir_subpasta, ler_emails, pesquisar_forms,
+    limpar_pesquisa,
 )
 from cvc_acessos.domain.regras import tem_cat_jira, casa_remetente
 from cvc_acessos.infrastructure.outlook.acoes import (
-    extrair_email, marcar_lido, mover_email, encaminhar_email,
+    extrair_email, marcar_lido, marcar_nao_lido, mover_email, mover_para_inbox,
+    encaminhar_email,
 )
 from cvc_acessos.infrastructure.jira.chamado import (
-    preencher_formulario, enviar_e_capturar_codigo,
+    preencher_formulario, enviar_e_capturar_codigo, cancelar_chamado,
 )
 from cvc_acessos.infrastructure.config.config_app import (
-    DRY_RUN, CAIXA, REMETENTE_FILTRO, SO_NAO_LIDOS, SUBPASTA_DESTINO,
-    MARCAR_COMO_LIDO, ENCERRAR_SESSOES_NO_FIM, URL_JIRA, JIRA_CAT_PREFIXO,
+    DRY_RUN, DEMO, DEMO_QTD, CAIXA, REMETENTE_FILTRO, SO_NAO_LIDOS,
+    SUBPASTA_DESTINO, MARCAR_COMO_LIDO, ENCERRAR_SESSOES_NO_FIM, URL_JIRA,
+    JIRA_CAT_PREFIXO, JIRA_PORTAL_BASE, JIRA_TRANSICAO_CANCELAR,
     ENCAMINHAR_ATIVO, ENCAMINHAR_DESTINATARIOS, ENCAMINHAR_ASSUNTO,
     ENCAMINHAR_PREFIXO, ENCAMINHAR_SEPARADOR,
 )
@@ -88,9 +91,95 @@ def _filtrar(outlook):
     ]
 
 
+def _aguardar_lista(outlook):
+    """Espera a lista da caixa compartilhada carregar (assincrona)."""
+    for _ in range(15):
+        if ler_emails(outlook, 5):
+            return
+        time.sleep(2)
+
+
+def processar_demo(outlook, jira):
+    """MODO DEMO (self-cleaning): processa ate DEMO_QTD e-mails de VERDADE
+    (cria chamado + encaminha + marca lido + move) e DEPOIS DESFAZ (cancela o
+    chamado + volta o e-mail ao Inbox nao lido). Demonstra o fluxo completo sem
+    deixar residuo. Retorna (feitos, feitos)."""
+    print("=" * 60)
+    print(f">> MODO DEMO (faz e desfaz) - ate {DEMO_QTD} e-mail(s)")
+    abrir_inbox_compartilhada(outlook, CAIXA)
+    _aguardar_lista(outlook)
+    n = pesquisar_forms(outlook, REMETENTE_FILTRO or "Microsoft Forms")
+    print(f">> Pesquisa '{REMETENTE_FILTRO}' (pasta atual): {n} resultado(s)")
+
+    # ---- FASE 1: processa de VERDADE ----
+    feitos = []                      # lista de (id, resumo, codigo)
+    try:
+        while len(feitos) < DEMO_QTD:
+            ja = {x[0] for x in feitos}
+            alvo = [e for e in _filtrar(outlook) if e["id"] not in ja]
+            if not alvo:
+                break
+            e = alvo[0]
+            dados = extrair_email(outlook, e["indice"])
+            print(f"\n>> [DEMO] criando chamado p/: {dados['titulo']}")
+            jira.bring_to_front()
+            jira.goto(URL_JIRA, wait_until="domcontentloaded")   # form de criacao
+            time.sleep(2)
+            if not preencher_formulario(jira, dados):
+                print("   [DEMO] formulario nao preencheu; parando FASE 1.")
+                break
+            codigo = enviar_e_capturar_codigo(jira)
+            link = jira.url.split("?")[0]
+            print(f"   [DEMO] chamado criado: {codigo}")
+            outlook.bring_to_front()
+            if ENCAMINHAR_ATIVO and ENCAMINHAR_DESTINATARIOS:
+                assunto = ENCAMINHAR_ASSUNTO.format(ticket=codigo,
+                                                    assunto=dados["titulo"])
+                encaminhar_email(outlook, e["indice"], ENCAMINHAR_DESTINATARIOS,
+                                 assunto, codigo, link, ENCAMINHAR_PREFIXO,
+                                 ENCAMINHAR_SEPARADOR)
+                print(f"   [DEMO] encaminhado p/ {ENCAMINHAR_DESTINATARIOS}")
+            marcar_lido(outlook, e["indice"])
+            mover_email(outlook, e["indice"], SUBPASTA_DESTINO)
+            print(f"   [DEMO] movido p/ '{SUBPASTA_DESTINO}' + marcado lido")
+            feitos.append((e["id"], e["resumo"], codigo))
+    finally:
+        limpar_pesquisa(outlook, CAIXA)
+    print(f"\n>> [DEMO] FASE 1: {len(feitos)} processado(s): "
+          f"{[c for _, _, c in feitos]}")
+
+    # ---- FASE 2: DESFAZ (cancela chamado + volta e-mail nao lido) ----
+    if feitos:
+        print(">> [DEMO] FASE 2: cancelando chamados e voltando os e-mails...")
+        for _id, _res, codigo in feitos:
+            cancelar_chamado(jira, codigo, JIRA_PORTAL_BASE,
+                             JIRA_TRANSICAO_CANCELAR, log=print)
+        outlook.bring_to_front()
+        abrir_subpasta(outlook, CAIXA, SUBPASTA_DESTINO)
+        _aguardar_lista(outlook)
+        ids = {x[0] for x in feitos}
+        for _ in range(len(feitos) + 2):     # move os nossos de volta ao Inbox
+            alvo = next((e for e in ler_emails(outlook, 100)
+                         if e["id"] in ids), None)
+            if not alvo:
+                break
+            mover_para_inbox(outlook, alvo["indice"])
+            time.sleep(1)
+        abrir_inbox_compartilhada(outlook, CAIXA)
+        _aguardar_lista(outlook)
+        for e in ler_emails(outlook, 100):   # restaura NAO lido (so os nossos)
+            if e["id"] in ids and not e["nao_lido"]:
+                marcar_nao_lido(outlook, e["indice"])
+        print(f">> [DEMO] concluido: {len(feitos)} ciclo(s) feito(s) e DESFEITO(s). "
+              "Caixa e Jira de volta ao estado original.")
+    return len(feitos), len(feitos)
+
+
 def processar(outlook, jira):
     """UM ciclo: abre a caixa, filtra e processa. NAO faz login nem logoff.
     Retorna (encontrados, processados)."""
+    if DEMO:
+        return processar_demo(outlook, jira)
     aberto = abrir_inbox_compartilhada(outlook, CAIXA)
     print(f">> Caixa de Entrada: {aberto}")
 

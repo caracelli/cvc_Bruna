@@ -95,6 +95,65 @@ def preencher_formulario(jira, dados):
     return True
 
 
+def _status_chamado(jira):
+    """Le o badge de status do chamado (texto curto). '?' se nao achar."""
+    for sel in ["[data-test-id*='status' i]", "[class*='status' i] span"]:
+        loc = jira.locator(sel)
+        for i in range(min(loc.count(), 6)):
+            t = (loc.nth(i).inner_text() or "").strip()
+            if t and len(t) < 40:
+                return t
+    return "?"
+
+
+def cancelar_chamado(jira, codigo, portal_base, transicao="Cancelado pelo Solicitante",
+                     log=print):
+    """CANCELA o chamado 'codigo' pelo portal (transicao do solicitante).
+    Usado no modo DEMO p/ desfazer. VALIDADO ao vivo (GAAR-11..22):
+      1. abre o chamado (portal_base + codigo)
+      2. clica a transicao p/ ABRIR o popup — clique INSTAVEL, com RETRY (5x)
+         ate o popup aparecer (placeholder 'Comentário opcional' OU 2+ botoes
+         de mesmo rotulo)
+      3. CONFIRMA no ULTIMO botao visivel de rotulo=transicao (o overlay
+         renderiza por ultimo; o botao 'Cancelar' do popup NAO cancela o chamado)
+      4. verifica pelo BADGE de status (reload). Retorna True se cancelou.
+    """
+    jira.goto(portal_base + codigo, wait_until="domcontentloaded")
+    time.sleep(6)
+    if jira.get_by_role("button", name=transicao, exact=False).count() == 0:
+        return "cancel" in _status_chamado(jira).lower()
+    aberto = False
+    for _ in range(5):
+        try:
+            jira.get_by_role("button", name=transicao, exact=False).first.click()
+        except Exception:
+            pass
+        for _ in range(8):
+            if (jira.get_by_placeholder("Comentário opcional").count() > 0
+                    or jira.get_by_role("button", name=transicao,
+                                        exact=False).count() >= 2):
+                aberto = True
+                break
+            time.sleep(0.5)
+        if aberto:
+            break
+        time.sleep(1)
+    cands = jira.get_by_role("button", name=transicao, exact=False)
+    for i in reversed(range(cands.count())):
+        try:
+            if cands.nth(i).is_visible():
+                cands.nth(i).click()
+                break
+        except Exception:
+            pass
+    time.sleep(4)
+    jira.reload(wait_until="domcontentloaded")
+    time.sleep(4)
+    ok = "cancel" in _status_chamado(jira).lower()
+    log(f"   Cancelamento {codigo}: {'OK' if ok else 'nao confirmado'}")
+    return ok
+
+
 def enviar_e_capturar_codigo(jira):
     """Clica em Enviar e captura o codigo do chamado (VALIDADO ao vivo: GAAR-x).
     Captura pela URL do chamado criado (.../portal/<n>/<CHAVE>?created=true);

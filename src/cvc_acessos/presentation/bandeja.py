@@ -162,7 +162,8 @@ def _cor_status():
 def atualizar_icone():
     if icone is None:
         return
-    modo = "DRY-RUN" if config_app.DRY_RUN else "REAL"
+    modo = ("DEMO" if config_app.DEMO
+            else "DRY-RUN" if config_app.DRY_RUN else "REAL")
     icone.title = (f"CVC Gestao de Acessos [{modo}]\n"
                    f"Status: {estado['status']}\n"
                    f"Ultima: {estado['ultima']} | "
@@ -327,7 +328,8 @@ def _menu():
                                    f"(enc {estado['encontrados']} / "
                                    f"proc {estado['processados']})", None,
                          enabled=False),
-        pystray.MenuItem(lambda i: ("Modo: DRY-RUN" if config_app.DRY_RUN
+        pystray.MenuItem(lambda i: ("Modo: DEMO (faz e desfaz)" if config_app.DEMO
+                                    else "Modo: DRY-RUN" if config_app.DRY_RUN
                                     else "Modo: REAL"), None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Verificar agora", on_verificar),
@@ -415,7 +417,7 @@ def main():
         return
 
     log(f"App iniciado. Intervalo {config_app.INTERVALO_MIN} min | "
-        f"{'DRY-RUN' if config_app.DRY_RUN else 'REAL'}")
+        f"{'DEMO' if config_app.DEMO else 'DRY-RUN' if config_app.DRY_RUN else 'REAL'}")
     icone = pystray.Icon("cvc_acessos", _img(_cor_status()),
                          "CVC Gestao de Acessos", _menu())
     threading.Thread(target=loop_monitor, daemon=True).start()

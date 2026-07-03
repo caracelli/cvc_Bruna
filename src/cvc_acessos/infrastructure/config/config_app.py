@@ -47,6 +47,9 @@ URL_JIRA = _txt(
 JIRA_TIPO_SOLICITUD = _txt("jira/tipo_solicitud", "forms")
 JIRA_COR_TITULO = _txt("jira/cor_titulo", "Verde-azulado forte")
 JIRA_CAT_PREFIXO = _txt("jira/categoria_prefixo", "JIRA -")
+JIRA_TRANSICAO_CANCELAR = _txt("jira/transicao_cancelar", "Cancelado pelo Solicitante")
+# base do portal (…/portal/1984/) derivada da URL de criacao, p/ abrir o chamado
+JIRA_PORTAL_BASE = URL_JIRA.split("/group/")[0].rstrip("/") + "/"
 
 # ---- Fluxo ----
 REMETENTE_FILTRO = _txt("fluxo/remetente_filtro", "Microsoft Forms")
@@ -55,6 +58,14 @@ SO_NAO_LIDOS = _bool("fluxo/so_nao_lidos", True)
 MARCAR_COMO_LIDO = _bool("fluxo/marcar_como_lido", True)
 ENCERRAR_SESSOES_NO_FIM = _bool("fluxo/encerrar_sessoes_no_fim", True)
 DRY_RUN = _bool("fluxo/dry_run", True)
+# DEMO (self-cleaning): faz o ciclo REAL (cria chamado + encaminha + move) e
+# DEPOIS DESFAZ (cancela o chamado + volta o e-mail ao Inbox nao lido). Serve
+# pra DEMONSTRAR o fluxo sem deixar residuo. Tem prioridade sobre o DRY_RUN.
+DEMO = _bool("fluxo/demo", False)
+try:
+    DEMO_QTD = int(_txt("fluxo/demo_qtd", "1") or "1")
+except ValueError:
+    DEMO_QTD = 1
 try:
     INTERVALO_MIN = int(_txt("fluxo/intervalo_min", "5") or "5")
 except ValueError:
