@@ -23,11 +23,12 @@ def _fechar_cookies(jira):
             break
 
 
-def preencher_formulario(jira, dados):
+def preencher_formulario(jira, dados, log=print):
     """Preenche Resumen + Descripcion (cabecalho teal + corpo + link) + Tipo.
     NAO envia. Retorna True se preencheu."""
     _fechar_cookies(jira)
     if jira.locator("#summary").count() == 0:
+        log("   [form] campo #summary nao encontrado (form nao carregou?).")
         return False
 
     titulo, corpo, link = dados["titulo"], dados["corpo"], dados["link"]
@@ -77,22 +78,49 @@ def preencher_formulario(jira, dados):
     except Exception:
         pass
 
-    # Tipo de solicitud
-    tipo = jira.locator("#pf-undefined-cd-26")
-    if tipo.count():
+    # Tipo de solicitud (CAMPO OBRIGATORIO: se nao selecionar, o botao Enviar
+    # fica DESABILITADO e o envio falha silenciosamente -> codigo '??-?').
+    if not _selecionar_tipo(jira, log):
+        log("   [form] AVISO: 'Tipo de solicitud' NAO foi selecionado; o botao "
+            "Enviar pode ficar DESABILITADO e o envio falhar.")
+    return True
+
+
+def _selecionar_tipo(jira, log=print):
+    """Seleciona o 'Tipo de solicitud' (obrigatorio). Tenta pelo id conhecido
+    (fragil) e, se falhar, por rotulo (pt/es/en). Retorna True se marcou uma
+    opcao. Digita JIRA_TIPO_SOLICITUD e escolhe a opcao que contem 'form'
+    (ou a 1a opcao, como ultimo recurso)."""
+    campos = [
+        jira.locator("#pf-undefined-cd-26"),
+        jira.get_by_label("Tipo de solicitud", exact=False),
+        jira.get_by_label("Tipo de solicitação", exact=False),
+        jira.get_by_label("Tipo de solicitacao", exact=False),
+        jira.get_by_label("Request type", exact=False),
+    ]
+    for campo in campos:
         try:
-            tipo.click()
+            if campo.count() == 0:
+                continue
+            campo.first.click()
             time.sleep(0.6)
             jira.keyboard.type(JIRA_TIPO_SOLICITUD)
             time.sleep(1.6)
             ops = jira.locator("[role='option']")
             for i in range(ops.count()):
-                if "form" in (ops.nth(i).inner_text() or "").lower():
+                txt = (ops.nth(i).inner_text() or "")
+                if "form" in txt.lower():
                     ops.nth(i).click()
-                    break
+                    log(f"   [form] tipo selecionado: '{txt.strip()[:40]}'")
+                    return True
+            if ops.count() > 0:
+                txt = ops.first.inner_text() or ""
+                ops.first.click()
+                log(f"   [form] tipo (1a opcao): '{txt.strip()[:40]}'")
+                return True
         except Exception:
-            pass
-    return True
+            continue
+    return False
 
 
 def _status_chamado(jira):
@@ -154,34 +182,97 @@ def cancelar_chamado(jira, codigo, portal_base, transicao="Cancelado pelo Solici
     return ok
 
 
-def enviar_e_capturar_codigo(jira, timeout_s=40):
-    """Clica em Enviar e captura o codigo do chamado (VALIDADO ao vivo: GAAR-x).
-    Captura pela URL do chamado criado (.../portal/<n>/<CHAVE>?created=true);
-    cai no corpo da pagina como fallback.
+def _listar_botoes(jira, limite=40):
+    """(texto, visivel, habilitado) dos buttons da pagina — p/ diagnostico."""
+    out = []
+    b = jira.locator("button")
+    for i in range(min(b.count(), limite)):
+        try:
+            txt = (b.nth(i).inner_text() or "").strip()
+            if txt:
+                out.append((txt[:35], b.nth(i).is_visible(),
+                            b.nth(i).is_enabled()))
+        except Exception:
+            pass
+    return out
 
-    ESPERA ATIVA: apos o clique, o Jira (SPA) redireciona para a pagina de
-    confirmacao de forma ASSINCRONA e pode demorar mais que uns poucos segundos
-    (rede, upload do link no editor, re-auth SSO). Uma espera fixa curta lia a
-    URL do FORMULARIO (ainda nao navegou) e retornava o sentinela '??-?' com o
-    link errado. Aqui aguardamos ate a URL virar '<CHAVE>-<n>' (timeout_s)."""
+
+def _clicar_enviar(jira, log=print):
+    """Clica o botao de ENVIAR do formulario. Exige botao VISIVEL + HABILITADO,
+    rola ate ele e tenta clicar (com retry, pois a validacao do form e
+    assincrona e o botao pode habilitar com um pequeno atraso). Procura por
+    rotulo (pt/es/en) e, por ultimo, por button[type=submit].
+    Retorna True se clicou; loga os botoes disponiveis se nao conseguir."""
+    rotulos = ["Enviar", "Criar", "Crear", "Create", "Send"]
+    for _ in range(4):
+        for nome in rotulos:
+            cand = jira.get_by_role("button", name=nome, exact=False)
+            for i in range(cand.count()):
+                b = cand.nth(i)
+                try:
+                    if b.is_visible() and b.is_enabled():
+                        b.scroll_into_view_if_needed(timeout=2000)
+                        b.click()
+                        log(f"   [enviar] cliquei no botao '{nome}'.")
+                        return True
+                except Exception:
+                    continue
+        sub = jira.locator("button[type='submit']")
+        for i in range(sub.count()):
+            b = sub.nth(i)
+            try:
+                if b.is_visible() and b.is_enabled():
+                    b.scroll_into_view_if_needed(timeout=2000)
+                    b.click()
+                    log("   [enviar] cliquei via button[type=submit].")
+                    return True
+            except Exception:
+                continue
+        time.sleep(1.5)     # aguarda a validacao assincrona habilitar o botao
+    log("   [enviar] NENHUM botao de envio VISIVEL+HABILITADO. Botoes na pagina:")
+    for txt, vis, en in _listar_botoes(jira):
+        log(f"      - '{txt}' visivel={vis} habilitado={en}")
+    return False
+
+
+def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
+    """Clica em Enviar e captura o codigo do chamado (VALIDADO ao vivo: GAAR-x).
+
+    1. clica o botao de envio de forma robusta (visivel+habilitado, com retry).
+    2. ESPERA ATIVA: apos o clique, o Jira (SPA) redireciona para a pagina do
+       chamado criado (.../portal/<n>/<CHAVE>-<n>) de forma ASSINCRONA; aguarda
+       ate a URL virar esse padrao (timeout_s) em vez de uma espera fixa.
+    3. fallback: procura o codigo no corpo da pagina.
+
+    Se o envio nao ocorrer (botao Enviar indisponivel — tipicamente por campo
+    obrigatorio nao preenchido) retorna '??-?' e LOGA o diagnostico, pois nesse
+    caso o codigo e o link ficariam errados."""
     url_antes = jira.url
     padrao = re.compile(r"/portal/\d+/([A-Z]{2,8}-\d+)")
-    jira.locator(
-        "button:has-text('Enviar'), button:has-text('Crear'), "
-        "button:has-text('Criar'), button:has-text('Send'), button[type='submit']"
-    ).first.click()
+    log(f"   [enviar] URL antes do envio: {url_antes}")
+
+    if not _clicar_enviar(jira, log):
+        log("   [enviar] FALHA: formulario NAO foi enviado (botao Enviar "
+            "indisponivel; provavel campo obrigatorio faltando). Codigo='??-?'.")
+        return "??-?"
 
     fim = time.time() + timeout_s
     while time.time() < fim:
         m = padrao.search(jira.url)
         if m and jira.url != url_antes:
+            log(f"   [enviar] chamado criado: {m.group(1)}  (URL: {jira.url})")
             return m.group(1)
         time.sleep(0.5)
 
-    # fallback: procura o codigo no corpo da pagina de confirmacao
+    log(f"   [enviar] a URL nao mudou apos {timeout_s}s (ainda: {jira.url}). "
+        "Tentando achar o codigo no corpo da pagina...")
     try:
         txt = jira.locator("body").inner_text()
     except Exception:
         txt = ""
     m2 = re.search(r"\b[A-Z]{2,8}-\d+\b", txt)
-    return m2.group(0) if m2 else "??-?"
+    if m2:
+        log(f"   [enviar] codigo achado no corpo: {m2.group(0)}")
+        return m2.group(0)
+    log("   [enviar] codigo NAO encontrado -> '??-?'.")
+    return "??-?"

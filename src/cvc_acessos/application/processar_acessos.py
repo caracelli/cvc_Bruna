@@ -129,6 +129,11 @@ def processar_demo(outlook, jira):
                 print("   [DEMO] formulario nao preencheu; parando FASE 1.")
                 break
             codigo = enviar_e_capturar_codigo(jira)
+            if codigo == "??-?":
+                print("   [DEMO][ERRO] envio do chamado falhou (codigo '??-?'); "
+                      "parando FASE 1 p/ nao encaminhar com link/numero errado. "
+                      "Veja o diagnostico [enviar]/[form] acima no log.")
+                break
             link = jira.url.split("?")[0]
             print(f"   [DEMO] chamado criado: {codigo}")
             outlook.bring_to_front()
@@ -233,6 +238,12 @@ def processar(outlook, jira):
                 print("   [ERRO] nao preencheu o formulario; parando.")
                 break
             codigo = enviar_e_capturar_codigo(jira)
+            if codigo == "??-?":
+                print("   [ERRO] nao consegui capturar o numero do chamado "
+                      "(envio falhou). Abortando este ciclo p/ NAO encaminhar "
+                      "com numero/link errado. Veja o diagnostico [enviar]/"
+                      "[form] acima no log.")
+                break
             link = jira.url.split("?")[0]                # URL do chamado criado
             print(f"   Chamado criado: {codigo}  ({link})")
             outlook.bring_to_front()
