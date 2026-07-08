@@ -7,7 +7,7 @@ import re
 import time
 
 from cvc_acessos.infrastructure.config.config_app import (
-    JIRA_TIPO_SOLICITUD, JIRA_COR_TITULO,
+    JIRA_TIPO_SOLICITUD, JIRA_COR_TITULO, JIRA_PORTAL_BASE,
 )
 
 
@@ -236,43 +236,54 @@ def _clicar_enviar(jira, log=print):
 
 
 def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
-    """Clica em Enviar e captura o codigo do chamado (VALIDADO ao vivo: GAAR-x).
+    """Clica em Enviar e captura (codigo, link) do chamado criado.
 
-    1. clica o botao de envio de forma robusta (visivel+habilitado, com retry).
-    2. ESPERA ATIVA: apos o clique, o Jira (SPA) redireciona para a pagina do
-       chamado criado (.../portal/<n>/<CHAVE>-<n>) de forma ASSINCRONA; aguarda
-       ate a URL virar esse padrao (timeout_s) em vez de uma espera fixa.
-    3. fallback: procura o codigo no corpo da pagina.
+    IMPORTANTE (validado ao vivo, GAAR-27): ESTE portal do JSM NAO redireciona
+    apos o envio — a URL continua no formulario (.../create/<n>) e o chamado
+    criado aparece como CONFIRMACAO no CORPO da pagina (ex.: 'GAAR-27'). Por
+    isso NAO da pra capturar pela URL nem derivar o link dela.
 
-    Se o envio nao ocorrer (botao Enviar indisponivel — tipicamente por campo
-    obrigatorio nao preenchido) retorna '??-?' e LOGA o diagnostico, pois nesse
-    caso o codigo e o link ficariam errados."""
+    Estrategia:
+      1. clica Enviar de forma robusta (visivel+habilitado, com retry).
+      2. AGUARDA o codigo surgir — pela URL (caso algum portal redirecione) OU
+         pelo CORPO — o que vier primeiro (poll a cada 0.5s). Assim capturamos
+         assim que o chamado e criado, sem esperar um redirect que nao vem.
+      3. deriva o LINK do chamado como JIRA_PORTAL_BASE + codigo (mesma forma
+         usada — e validada — por cancelar_chamado).
+
+    Retorna (codigo, link). Se o envio/captura falhar, retorna ('??-?', url_atual)
+    e LOGA o diagnostico (o caller aborta p/ nao encaminhar com dados errados)."""
     url_antes = jira.url
-    padrao = re.compile(r"/portal/\d+/([A-Z]{2,8}-\d+)")
+    padrao_url = re.compile(r"/portal/\d+/([A-Z]{2,8}-\d+)")
+    padrao_txt = re.compile(r"\b[A-Z]{2,8}-\d+\b")
     log(f"   [enviar] URL antes do envio: {url_antes}")
 
     if not _clicar_enviar(jira, log):
         log("   [enviar] FALHA: formulario NAO foi enviado (botao Enviar "
             "indisponivel; provavel campo obrigatorio faltando). Codigo='??-?'.")
-        return "??-?"
+        return "??-?", jira.url
 
     fim = time.time() + timeout_s
     while time.time() < fim:
-        m = padrao.search(jira.url)
+        # 1) algum portal redireciona p/ a pagina do chamado -> pega da URL
+        m = padrao_url.search(jira.url)
         if m and jira.url != url_antes:
-            log(f"   [enviar] chamado criado: {m.group(1)}  (URL: {jira.url})")
-            return m.group(1)
+            link = jira.url.split("?")[0]
+            log(f"   [enviar] chamado criado (via URL): {m.group(1)}  ({link})")
+            return m.group(1), link
+        # 2) ESTE portal: o codigo aparece no CORPO (banner de confirmacao)
+        try:
+            txt = jira.locator("body").inner_text()
+        except Exception:
+            txt = ""
+        m2 = padrao_txt.search(txt)
+        if m2:
+            codigo = m2.group(0)
+            link = JIRA_PORTAL_BASE + codigo
+            log(f"   [enviar] chamado criado (via corpo): {codigo}  ({link})")
+            return codigo, link
         time.sleep(0.5)
 
-    log(f"   [enviar] a URL nao mudou apos {timeout_s}s (ainda: {jira.url}). "
-        "Tentando achar o codigo no corpo da pagina...")
-    try:
-        txt = jira.locator("body").inner_text()
-    except Exception:
-        txt = ""
-    m2 = re.search(r"\b[A-Z]{2,8}-\d+\b", txt)
-    if m2:
-        log(f"   [enviar] codigo achado no corpo: {m2.group(0)}")
-        return m2.group(0)
-    log("   [enviar] codigo NAO encontrado -> '??-?'.")
-    return "??-?"
+    log(f"   [enviar] codigo NAO encontrado apos {timeout_s}s (URL: {jira.url}) "
+        "-> '??-?'.")
+    return "??-?", jira.url
