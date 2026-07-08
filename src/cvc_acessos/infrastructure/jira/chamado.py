@@ -154,19 +154,34 @@ def cancelar_chamado(jira, codigo, portal_base, transicao="Cancelado pelo Solici
     return ok
 
 
-def enviar_e_capturar_codigo(jira):
+def enviar_e_capturar_codigo(jira, timeout_s=40):
     """Clica em Enviar e captura o codigo do chamado (VALIDADO ao vivo: GAAR-x).
     Captura pela URL do chamado criado (.../portal/<n>/<CHAVE>?created=true);
-    cai no corpo da pagina como fallback."""
+    cai no corpo da pagina como fallback.
+
+    ESPERA ATIVA: apos o clique, o Jira (SPA) redireciona para a pagina de
+    confirmacao de forma ASSINCRONA e pode demorar mais que uns poucos segundos
+    (rede, upload do link no editor, re-auth SSO). Uma espera fixa curta lia a
+    URL do FORMULARIO (ainda nao navegou) e retornava o sentinela '??-?' com o
+    link errado. Aqui aguardamos ate a URL virar '<CHAVE>-<n>' (timeout_s)."""
     url_antes = jira.url
+    padrao = re.compile(r"/portal/\d+/([A-Z]{2,8}-\d+)")
     jira.locator(
         "button:has-text('Enviar'), button:has-text('Crear'), "
         "button:has-text('Criar'), button:has-text('Send'), button[type='submit']"
     ).first.click()
-    time.sleep(5)
-    m = re.search(r"/portal/\d+/([A-Z]{2,8}-\d+)", jira.url)
-    if m and jira.url != url_antes:
-        return m.group(1)
-    txt = jira.locator("body").inner_text()
+
+    fim = time.time() + timeout_s
+    while time.time() < fim:
+        m = padrao.search(jira.url)
+        if m and jira.url != url_antes:
+            return m.group(1)
+        time.sleep(0.5)
+
+    # fallback: procura o codigo no corpo da pagina de confirmacao
+    try:
+        txt = jira.locator("body").inner_text()
+    except Exception:
+        txt = ""
     m2 = re.search(r"\b[A-Z]{2,8}-\d+\b", txt)
     return m2.group(0) if m2 else "??-?"

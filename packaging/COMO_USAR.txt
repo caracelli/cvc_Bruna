@@ -1,0 +1,35 @@
+CVC - Gestao de Acessos (.EXE) - PACOTE DE TESTE (MODO DEMO)
+
+Este pacote vem em MODO DEMO (faz e desfaz): ele executa o fluxo
+COMPLETO de VERDADE em 1 e-mail - cria o chamado no Jira, encaminha,
+marca lido e move pra Finalizados - e DEPOIS DESFAZ TUDO: cancela o
+chamado e volta o e-mail pro Inbox como nao lido.
+
+Assim voce VE o processo inteiro funcionando, e no fim a caixa e o
+Jira ficam exatamente como estavam (sem residuo).
+
+COMO USAR
+1. Duplo-clique em cvc-acessos.exe (icone aparece na bandeja, ao lado
+   do relogio).
+2. O Edge abre e faz login sozinho. APROVE O MFA no celular na 1a vez.
+3. Acompanhe o Edge: ele pesquisa os Microsoft Forms, cria o chamado,
+   encaminha, move pra Finalizados... e depois cancela e devolve o
+   e-mail pro Inbox nao lido.
+4. Botao direito no icone da bandeja -> "Ver log" pra ver o passo-a-passo
+   (e o numero do chamado GAAR criado/cancelado).
+
+Ele repete o ciclo a cada 5 min (ou clique "Verificar agora" no menu).
+Cada rodada faz e desfaz 1 e-mail.
+
+PASTAS
+  dados\      = suas configuracoes (NAO apague)
+  _internal\  = sistema (NAO mexa)
+
+REQUISITOS
+  - Microsoft Edge instalado
+  - NAO precisa de Python nem pip
+
+MODOS (em dados\config.xml, secao <fluxo>):
+  demo=true      -> faz e desfaz (este pacote)
+  demo=false + dry_run=true  -> so simula (nao toca em nada)
+  demo=false + dry_run=false -> PRODUCAO (cria de verdade e NAO desfaz)
