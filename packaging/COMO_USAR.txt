@@ -1,4 +1,4 @@
-CVC - Gestao de Acessos (.EXE) - PACOTE DE TESTE (MODO DEMO)
+CVC-Trata-Forms (.EXE) - PACOTE DE TESTE (MODO DEMO)
 
 Este pacote vem em MODO DEMO (faz e desfaz): ele executa o fluxo
 COMPLETO de VERDADE em 1 e-mail - cria o chamado no Jira, encaminha,
@@ -9,7 +9,7 @@ Assim voce VE o processo inteiro funcionando, e no fim a caixa e o
 Jira ficam exatamente como estavam (sem residuo).
 
 COMO USAR
-1. Duplo-clique em cvc-acessos.exe (icone aparece na bandeja, ao lado
+1. Duplo-clique em CVC-Trata-Forms.exe (icone aparece na bandeja, ao lado
    do relogio).
 2. O Edge abre e faz login sozinho. APROVE O MFA no celular na 1a vez.
 3. Acompanhe o Edge: ele pesquisa os Microsoft Forms, cria o chamado,

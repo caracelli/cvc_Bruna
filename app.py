@@ -1,9 +1,9 @@
 """
 Entrypoint UNICO do .exe (PyInstaller). Um so executavel, 3 modos por argumento:
 
-    cvc-acessos.exe                 -> abre o app de bandeja (padrao)
-    cvc-acessos.exe --config        -> abre o formulario de configuracao
-    cvc-acessos.exe --fechar-popups -> loop do fechador de popups do Edge
+    CVC-Trata-Forms.exe                 -> abre o app de bandeja (padrao)
+    CVC-Trata-Forms.exe --config        -> abre o formulario de configuracao
+    CVC-Trata-Forms.exe --fechar-popups -> loop do fechador de popups do Edge
 
 (No modo .exe, sys.executable e o proprio .exe, entao os subprocessos internos
 chamam 'sys.executable --config' / '--fechar-popups' em vez de 'python -m ...'.)
@@ -34,12 +34,12 @@ def main():
         import keyring  # noqa: F401
         import uiautomation  # noqa: F401
         from playwright.sync_api import sync_playwright  # noqa: F401
-        import cvc_acessos.presentation.bandeja  # noqa: F401
+        import cvc_trata_forms.presentation.bandeja  # noqa: F401
         print("CHECK OK: pystray, PIL, keyring, uiautomation, playwright, "
-              "cvc_acessos - tudo empacotado.")
+              "cvc_trata_forms - tudo empacotado.")
         return
     if "--fechar-popups" in args:
-        from cvc_acessos.infrastructure.sistema.fechar_popups import (
+        from cvc_trata_forms.infrastructure.sistema.fechar_popups import (
             dispensar_popups_edge,
         )
         while True:
@@ -49,10 +49,10 @@ def main():
                 pass
             time.sleep(3)
     elif "--config" in args:
-        from cvc_acessos.presentation.form_config import main as form_main
+        from cvc_trata_forms.presentation.form_config import main as form_main
         form_main()
     else:
-        from cvc_acessos.presentation.bandeja import main as bandeja_main
+        from cvc_trata_forms.presentation.bandeja import main as bandeja_main
         bandeja_main()
 
 

@@ -1,1 +1,0 @@
-"""Pacote cvc_acessos."""

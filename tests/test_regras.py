@@ -1,5 +1,5 @@
 """Testes da camada de DOMINIO (puros, rodam no CI sem navegador)."""
-from cvc_acessos.domain.regras import (
+from cvc_trata_forms.domain.regras import (
     limpar_titulo, tem_cat_jira, casa_remetente,
 )
 

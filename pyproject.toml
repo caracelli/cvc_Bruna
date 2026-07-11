@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cvc-acessos"
+name = "cvc-trata-forms"
 version = "1.0.0"
-description = "Automacao Gestao de Acessos CVC (Outlook -> Jira) com encaminhamento ao grupo"
+description = "CVC-Trata-Forms: automacao da caixa Gestao de Acessos (Outlook -> Jira) com encaminhamento ao grupo"
 requires-python = ">=3.10"
 dependencies = [
     "playwright>=1.40.0",
@@ -16,8 +16,8 @@ dependencies = [
 ]
 
 [project.scripts]
-cvc-acessos = "cvc_acessos.presentation.bandeja:main"
-cvc-config = "cvc_acessos.presentation.form_config:main"
+cvc-trata-forms = "cvc_trata_forms.presentation.bandeja:main"
+cvc-trata-forms-config = "cvc_trata_forms.presentation.form_config:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -32,6 +32,6 @@ extend-exclude = ["build", "dist"]
 
 [tool.ruff.lint.per-file-ignores]
 # bandeja: faz monkeypatch do pystray ANTES dos imports (proposital).
-"src/cvc_acessos/presentation/bandeja.py" = ["E402"]
+"src/cvc_trata_forms/presentation/bandeja.py" = ["E402"]
 # login_jira: import de config posicionado apos as constantes (legado).
-"src/cvc_acessos/infrastructure/jira/login_jira.py" = ["E402"]
+"src/cvc_trata_forms/infrastructure/jira/login_jira.py" = ["E402"]

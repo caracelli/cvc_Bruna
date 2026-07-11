@@ -17,7 +17,7 @@ jobs:
       - name: Montar pacote de deploy
         run: |
           set -e
-          PKG=dist/cvc_gestao_acessos
+          PKG=dist/CVC-Trata-Forms
           mkdir -p "$PKG"
           cp -r src "$PKG"/
           cp requirements.txt "$PKG"/ 2>/dev/null || true
@@ -27,9 +27,9 @@ jobs:
           cp pyproject.toml "$PKG"/ 2>/dev/null || true
           # config.xml de deploy: copia o exemplo (sem credenciais)
           cp config.example.xml "$PKG"/config.xml
-          cd dist && zip -r cvc_gestao_acessos.zip cvc_gestao_acessos
+          cd dist && zip -r CVC-Trata-Forms.zip CVC-Trata-Forms
 
       - name: Publicar no GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/cvc_gestao_acessos.zip
+          files: dist/CVC-Trata-Forms.zip

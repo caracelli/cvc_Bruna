@@ -81,7 +81,7 @@ def main():
 
     # tudo ok -> abre o app
     sys.path.insert(0, os.path.join(RAIZ, "src"))
-    from cvc_acessos.presentation.bandeja import main as app_main
+    from cvc_trata_forms.presentation.bandeja import main as app_main
     app_main()
 
 

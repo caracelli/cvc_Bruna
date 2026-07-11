@@ -1,8 +1,8 @@
 <#
 ================================================================================
-  build.ps1 - Gera o pacote .EXE do CVC / Gestao de Acessos (PyInstaller onedir)
+  build.ps1 - Gera o pacote .EXE do CVC-Trata-Forms (PyInstaller onedir)
 ================================================================================
-  Reproduz o bundle 'cvc_gestao_acessos_EXE.zip' do zero:
+  Reproduz o bundle 'CVC-Trata-Forms.zip' do zero:
     1. garante o venv (.venv) com as deps + PyInstaller
     2. roda o PyInstaller (onedir, windowed) empacotando o driver do Playwright
     3. injeta os assets do bundle (COMO_USAR.txt + dados/config.xml)
@@ -24,9 +24,9 @@ $ErrorActionPreference = "Stop"
 $Repo   = $PSScriptRoot
 $Venv   = Join-Path $Repo ".venv"
 $VPy    = Join-Path $Venv "Scripts\python.exe"
-$Dist   = Join-Path $Repo "dist\cvc-acessos"
+$Dist   = Join-Path $Repo "dist\CVC-Trata-Forms"
 $Pack   = Join-Path $Repo "packaging"
-$ZipOut = Join-Path $Repo "cvc_gestao_acessos_EXE.zip"
+$ZipOut = Join-Path $Repo "CVC-Trata-Forms.zip"
 
 function Find-Python {
     foreach ($c in @("python", "py")) {
@@ -56,7 +56,7 @@ Write-Host ">> Rodando PyInstaller (onedir, windowed)..."
 Push-Location $Repo
 try {
     & $VPy -m PyInstaller --noconfirm --clean --onedir --windowed `
-        --name cvc-acessos --paths src `
+        --name CVC-Trata-Forms --paths src `
         --collect-all playwright --collect-all pystray --collect-all keyring `
         --collect-all uiautomation --collect-all PIL `
         app.py
@@ -79,17 +79,17 @@ if (Test-Path $cfg) {
 
 # --- 4. Zip final (barras '/', via Python) -----------------------------------
 Write-Host ">> Validando o exe (--check)..."
-$p = Start-Process -FilePath (Join-Path $Dist "cvc-acessos.exe") -ArgumentList "--check" -Wait -PassThru
+$p = Start-Process -FilePath (Join-Path $Dist "CVC-Trata-Forms.exe") -ArgumentList "--check" -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "Validacao --check falhou (exit $($p.ExitCode)): alguma lib nao empacotou." }
 Write-Host "   OK: libs pesadas empacotadas."
 
 if (Test-Path $ZipOut) {
-    Move-Item $ZipOut (Join-Path $Repo "cvc_gestao_acessos_EXE.OLD.zip") -Force
-    Write-Host ">> Zip anterior -> cvc_gestao_acessos_EXE.OLD.zip"
+    Move-Item $ZipOut (Join-Path $Repo "CVC-Trata-Forms.OLD.zip") -Force
+    Write-Host ">> Zip anterior -> CVC-Trata-Forms.OLD.zip"
 }
 Write-Host ">> Compactando o pacote..."
-$base = Join-Path $Repo "cvc_gestao_acessos_EXE"
-& $VPy -c "import shutil; shutil.make_archive(r'$base', 'zip', root_dir=r'$Repo\dist', base_dir='cvc-acessos')"
+$base = Join-Path $Repo "CVC-Trata-Forms"
+& $VPy -c "import shutil; shutil.make_archive(r'$base', 'zip', root_dir=r'$Repo\dist', base_dir='CVC-Trata-Forms')"
 
 $mb = [math]::Round((Get-Item $ZipOut).Length / 1MB, 1)
 Write-Host ""
