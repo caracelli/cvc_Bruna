@@ -248,7 +248,8 @@ def _confirmar_popup_enviar(outlook):
 
 def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
                      prefixo="Chamado aberto: ",
-                     separador="--- Mensagem original (Microsoft Forms) abaixo ---"):
+                     separador="--- Mensagem original (Microsoft Forms) abaixo ---",
+                     log=print):
     """Encaminha o e-mail (indice) para 'destinatarios' com o assunto dado e,
     no TOPO do corpo, a linha '<prefixo><ticket como HYPERLINK p/ link>' + o
     separador. Retorna True se enviou. VALIDADO ao vivo.
@@ -262,6 +263,14 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
         raise RuntimeError("menu 'Encaminhar' nao abriu")
     outlook.get_by_role("menuitem", name="Encaminhar", exact=False).first.click()
     time.sleep(3.5)
+
+    # Se o campo 'Para' do compose nao aparecer, algo saiu do esperado (compose
+    # nao abriu / layout diferente) -> captura print+HTML e aborta com clareza,
+    # em vez de digitar no lugar errado e mandar e-mail torto.
+    if outlook.locator("[contenteditable='true'][aria-label='Para']").count() == 0:
+        log("   [encaminhar] campo 'Para' NAO apareceu (compose nao abriu?).")
+        salvar_diagnostico(outlook, "encaminhar_compose_nao_abriu", log)
+        raise RuntimeError("compose de Encaminhar nao abriu.")
 
     # Para (people picker)
     para = outlook.locator("[contenteditable='true'][aria-label='Para']").first

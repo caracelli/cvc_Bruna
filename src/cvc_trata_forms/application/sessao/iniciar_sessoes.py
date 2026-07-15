@@ -88,6 +88,44 @@ def _desativar_salvar_senha():
         pass
 
 
+def _log_layout(msg):
+    """Loga direto no cvc_bandeja.log (o login roda fora do redirect de stdout,
+    entao print() nao apareceria no log principal)."""
+    try:
+        import time as _t
+        from cvc_trata_forms.infrastructure.sistema.caminhos import RAIZ
+        with open(os.path.join(RAIZ, "cvc_bandeja.log"), "a",
+                  encoding="utf-8") as f:
+            f.write(_t.strftime("%d/%m %H:%M") + "  [layout] " + msg + "\n")
+    except Exception:
+        pass
+
+
+def _forcar_layout_amplo(page, log=print):
+    """Forca um viewport LARGO e fixo (1600x900), independente do tamanho FISICO
+    da tela, p/ o OWA e o Jira renderizarem o layout DESKTOP ate num notebook de
+    tela pequena. Sem isto, telas menores mudam o layout responsivo e os cliques
+    / o cursor (Control+Home) caem em posicao diferente -> falha no botao Enviar
+    e no preenchimento do encaminhamento. Via CDP. Nunca lanca.
+    Pode ser desligado p/ teste com a variavel CVC_VIEWPORT_OVERRIDE=off."""
+    if os.environ.get("CVC_VIEWPORT_OVERRIDE", "").strip().lower() == "off":
+        _log_layout("override DESLIGADO (CVC_VIEWPORT_OVERRIDE=off)")
+        return
+    try:
+        cdp = page.context.new_cdp_session(page)
+        cdp.send("Emulation.setDeviceMetricsOverride", {
+            "width": 1600, "height": 900,
+            "deviceScaleFactor": 1, "mobile": False,
+        })
+        try:
+            w = page.evaluate("window.innerWidth")
+        except Exception:
+            w = "?"
+        _log_layout(f"viewport forcado p/ 1600x900 -> innerWidth={w}")
+    except Exception as e:
+        _log_layout(f"FALHOU ao forcar o viewport: {e}")
+
+
 def abrir_edge_se_preciso(url_inicial):
     """Abre o Edge ja apontando para 'url_inicial' (o Outlook).
 
@@ -129,7 +167,11 @@ def abrir_edge_se_preciso(url_inicial):
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
         "--disable-background-timer-throttling",
-        "--start-maximized",                   # abre a janela visivel/grande
+        # janela grande por padrao; CVC_WINDOW_SIZE=1024,600 forca uma pequena
+        # (p/ TESTE de tela de notebook). Ex.: CVC_WINDOW_SIZE=1024,600
+        (f"--window-size={os.environ['CVC_WINDOW_SIZE'].strip()}"
+         if os.environ.get("CVC_WINDOW_SIZE", "").strip()
+         else "--start-maximized"),
         url_inicial,
     ]
     # CREATE_BREAKAWAY_FROM_JOB: faz o Edge sobreviver quando o script termina
@@ -291,6 +333,7 @@ def _main_impl():
         ["outlook", "office.com", "login.microsoft", "login.live"],
         URL_OUTLOOK,
     )
+    _forcar_layout_amplo(outlook)   # layout desktop mesmo em tela pequena
     try:
         outlook.bring_to_front()
     except Exception:
@@ -339,6 +382,7 @@ def _main_impl():
     print("  PASSO 2/2  -  JIRA  (Outlook ja logado, abrindo o Jira agora)")
     print("-" * 70)
     jira = garantir_aba(browser, ["atlassian"], URL_JIRA)
+    _forcar_layout_amplo(jira)      # layout desktop mesmo em tela pequena
 
     # DUAS FRENTES tambem no Jira: automatico (SSO) com fallback manual.
     email, senha = obter_outlook()
