@@ -7,6 +7,7 @@ Recebem sempre a 'page' do Outlook (nao criam sessao).
 import time
 
 from cvc_trata_forms.domain.regras import limpar_titulo
+from cvc_trata_forms.infrastructure.sistema.diagnostico import salvar_diagnostico
 
 
 def extrair_email(outlook, indice):
@@ -126,28 +127,50 @@ _EXCL_INBOX = ("finalizados", "gest", "junk", "caixa", "draft", "sent",
                "histórico", "historico")
 
 
-def mover_para_inbox(outlook, indice):
+def mover_para_inbox(outlook, indice, log=print):
     """Move o e-mail de volta pro Inbox da caixa COMPARTILHADA (usado no DEMO
     p/ desfazer). Busca 'Inbox' no dialogo e clica o treeitem que casa 'inbox'
-    e NAO casa nenhuma pasta pessoal/lixo/root (_EXCL_INBOX). Retorna True."""
-    if not _abrir_menu_contexto(outlook, indice, "Mover"):
+    e NAO casa nenhuma pasta pessoal/lixo/root (_EXCL_INBOX).
+    Retorna True se moveu; False se nao conseguiu (NUNCA lanca -> nao derruba o
+    ciclo). Em caso de falha, salva um diagnostico (print+HTML) do estado atual
+    p/ inspecao remota (o menu 'Mover' se comporta diferente na subpasta)."""
+    try:
+        if not _abrir_menu_contexto(outlook, indice, "Mover"):
+            salvar_diagnostico(outlook, "mover_inbox_menu_nao_abriu", log)
+            return False
+        # timeout curto (8s): se nao aparecer, capturamos o menu em vez de
+        # pendurar 30s no default do Playwright.
+        outlook.get_by_role("menuitem", name="Selecionar uma pasta diferente",
+                            exact=False).first.click(timeout=8000)
+        time.sleep(2)
+        outlook.fill("input[placeholder='Digite o nome da pasta ou do grupo']",
+                     "Inbox")
+        time.sleep(2)
+        tt = outlook.locator("[role='dialog'] [role='treeitem']")
+        for i in range(tt.count()):
+            t = (tt.nth(i).inner_text() or "").lower()
+            if "inbox" in t and all(x not in t for x in _EXCL_INBOX):
+                tt.nth(i).locator(".fui-TreeItemLayout").first.click()
+                time.sleep(0.8)
+                outlook.get_by_role("button", name="Mover", exact=True).first.click()
+                time.sleep(3)
+                return True
+        # menu abriu mas nao achamos o 'Inbox' na arvore -> diagnostica
+        log("   [mover_inbox] 'Inbox' nao encontrado na arvore do dialogo.")
+        salvar_diagnostico(outlook, "mover_inbox_sem_inbox_na_arvore", log)
+        try:
+            outlook.keyboard.press("Escape")
+        except Exception:
+            pass
         return False
-    outlook.get_by_role("menuitem", name="Selecionar uma pasta diferente",
-                        exact=False).first.click()
-    time.sleep(2)
-    outlook.fill("input[placeholder='Digite o nome da pasta ou do grupo']", "Inbox")
-    time.sleep(2)
-    tt = outlook.locator("[role='dialog'] [role='treeitem']")
-    for i in range(tt.count()):
-        t = (tt.nth(i).inner_text() or "").lower()
-        if "inbox" in t and all(x not in t for x in _EXCL_INBOX):
-            tt.nth(i).locator(".fui-TreeItemLayout").first.click()
-            time.sleep(0.8)
-            outlook.get_by_role("button", name="Mover", exact=True).first.click()
-            time.sleep(3)
-            return True
-    outlook.keyboard.press("Escape")
-    return False
+    except Exception as e:
+        log(f"   [mover_inbox] FALHA ao mover de volta: {e}")
+        salvar_diagnostico(outlook, "mover_inbox_falhou", log)
+        try:
+            outlook.keyboard.press("Escape")
+        except Exception:
+            pass
+        return False
 
 
 def _toggle_leitura(outlook, indice, titulos):

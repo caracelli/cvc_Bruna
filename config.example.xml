@@ -17,11 +17,15 @@
     <tipo_solicitud>forms</tipo_solicitud>
     <cor_titulo>Verde-azulado forte</cor_titulo>
     <categoria_prefixo>JIRA -</categoria_prefixo>
+    <!-- Opcional: prefixo do codigo do chamado (ex.: GAAR). Se preenchido, a
+         captura do numero pos-envio so aceita tokens com esse prefixo, evitando
+         pegar um codigo parecido que estivesse no corpo do e-mail. Vazio = qualquer. -->
+    <prefixo_chamado></prefixo_chamado>
   </jira>
 
   <fluxo>
     <remetente_filtro>Microsoft Forms</remetente_filtro>
-    <subpasta_destino>Finalizado</subpasta_destino>
+    <subpasta_destino>Finalizados</subpasta_destino>
     <so_nao_lidos>true</so_nao_lidos>
     <marcar_como_lido>true</marcar_como_lido>
     <encerrar_sessoes_no_fim>true</encerrar_sessoes_no_fim>

@@ -241,7 +241,12 @@ def loop_monitor():
         if not pausado.is_set():
             ok = ciclo()
             if not ok and not parar.is_set():
-                # Edge fechou / sessao caiu -> reabre o Edge e re-loga sozinho
+                # Edge fechou / sessao caiu -> reabre o Edge e re-loga sozinho.
+                # NAO re-roda o ciclo imediatamente: espera o intervalo (ou um
+                # "Verificar agora"). Motivo: um erro NO MEIO do ciclo (ex.: a
+                # FASE 2 do DEMO falhando ao mover o e-mail de volta) tambem cai
+                # aqui; re-rodar na hora criaria chamados/encaminhamentos
+                # duplicados em loop.
                 log("Ciclo falhou (Edge fechado/sessao caiu) - "
                     "reabrindo o Edge e re-logando...")
                 estado["status"] = "recuperando (re-login)..."
@@ -365,8 +370,22 @@ def _config_faltando():
     return faltam
 
 
+def _definir_app_id():
+    """Windows: define um AppUserModelID explicito p/ as notificacoes/janelas
+    aparecerem com o NOME DO APP em vez de 'Python' (que e o processo hospedeiro
+    quando roda pela fonte). No .exe empacotado ja aparece o nome do exe, mas
+    isso deixa consistente tambem rodando pela fonte. So-Windows; nunca lanca."""
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "CVC.TrataForms")
+    except Exception:
+        pass
+
+
 def main():
     global icone
+    _definir_app_id()
     # 1a execucao / config incompleta -> abre o FORM direto (nao inicia o monitor)
     faltam = _config_faltando()
     if faltam:

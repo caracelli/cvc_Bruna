@@ -7,8 +7,9 @@ import re
 import time
 
 from cvc_trata_forms.infrastructure.config.config_app import (
-    JIRA_TIPO_SOLICITUD, JIRA_COR_TITULO, JIRA_PORTAL_BASE,
+    JIRA_TIPO_SOLICITUD, JIRA_COR_TITULO, JIRA_PORTAL_BASE, JIRA_PREFIXO_CHAMADO,
 )
+from cvc_trata_forms.infrastructure.sistema.diagnostico import salvar_diagnostico
 
 
 def _fechar_cookies(jira):
@@ -29,6 +30,7 @@ def preencher_formulario(jira, dados, log=print):
     _fechar_cookies(jira)
     if jira.locator("#summary").count() == 0:
         log("   [form] campo #summary nao encontrado (form nao carregou?).")
+        salvar_diagnostico(jira, "form_nao_carregou", log)
         return False
 
     titulo, corpo, link = dados["titulo"], dados["corpo"], dados["link"]
@@ -197,12 +199,39 @@ def _listar_botoes(jira, limite=40):
     return out
 
 
+def _enviar_por_enter(jira, log=print):
+    """Fallback de submit por TECLADO: em algumas maquinas/portais o botao
+    Enviar nao responde ao clique programatico, mas o formulario E enviado ao
+    pressionar ENTER (confirmado ao vivo na maquina do cliente). Tenta o ENTER
+    com o foco atual (onde a selecao do 'Tipo' deixou) e depois focando o campo
+    Resumen (#summary, input de 1 linha -> Enter aciona o submit implicito).
+    NUNCA usa o editor de descricao (Enter la so quebra linha).
+    Retorna True (best-effort; quem confirma o envio e a captura do codigo)."""
+    try:
+        log("   [enviar] fallback: enviando via tecla ENTER (foco atual).")
+        jira.keyboard.press("Enter")
+        time.sleep(1.5)
+    except Exception as e:
+        log(f"   [enviar] ENTER (foco atual) falhou: {e}")
+    try:
+        s = jira.locator("#summary")
+        if s.count() > 0:
+            s.first.click()
+            time.sleep(0.3)
+            log("   [enviar] fallback: ENTER com foco no campo Resumen.")
+            jira.keyboard.press("Enter")
+            time.sleep(1.0)
+    except Exception as e:
+        log(f"   [enviar] ENTER (Resumen) falhou: {e}")
+    return True
+
+
 def _clicar_enviar(jira, log=print):
-    """Clica o botao de ENVIAR do formulario. Exige botao VISIVEL + HABILITADO,
-    rola ate ele e tenta clicar (com retry, pois a validacao do form e
-    assincrona e o botao pode habilitar com um pequeno atraso). Procura por
-    rotulo (pt/es/en) e, por ultimo, por button[type=submit].
-    Retorna True se clicou; loga os botoes disponiveis se nao conseguir."""
+    """Envia o formulario. 1o tenta CLICAR o botao (VISIVEL + HABILITADO, rola
+    ate ele, retry pois a validacao do form e assincrona; por rotulo pt/es/en
+    e por ultimo button[type=submit]). Se nenhum clique disparar, cai no
+    fallback por ENTER (_enviar_por_enter). Retorna True se conseguiu enviar
+    (por clique OU por Enter); loga os botoes disponiveis antes do fallback."""
     rotulos = ["Enviar", "Criar", "Crear", "Create", "Send"]
     for _ in range(4):
         for nome in rotulos:
@@ -229,10 +258,12 @@ def _clicar_enviar(jira, log=print):
             except Exception:
                 continue
         time.sleep(1.5)     # aguarda a validacao assincrona habilitar o botao
-    log("   [enviar] NENHUM botao de envio VISIVEL+HABILITADO. Botoes na pagina:")
+    log("   [enviar] NENHUM botao de envio respondeu ao clique. Botoes na pagina:")
     for txt, vis, en in _listar_botoes(jira):
         log(f"      - '{txt}' visivel={vis} habilitado={en}")
-    return False
+    # fallback por teclado: o clique nao dispara em algumas maquinas, mas o
+    # ENTER envia o formulario (comportamento confirmado na maquina do cliente).
+    return _enviar_por_enter(jira, log)
 
 
 def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
@@ -254,13 +285,19 @@ def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
     Retorna (codigo, link). Se o envio/captura falhar, retorna ('??-?', url_atual)
     e LOGA o diagnostico (o caller aborta p/ nao encaminhar com dados errados)."""
     url_antes = jira.url
-    padrao_url = re.compile(r"/portal/\d+/([A-Z]{2,8}-\d+)")
-    padrao_txt = re.compile(r"\b[A-Z]{2,8}-\d+\b")
+    # Se um prefixo de chamado esta configurado (ex.: 'GAAR'), a captura SO
+    # aceita tokens com esse prefixo -> blinda contra pegar um 'ABC-123' que
+    # ja estava no corpo do e-mail Forms. Vazio = aceita qualquer prefixo.
+    pref = (JIRA_PREFIXO_CHAMADO or "").strip().rstrip("-")
+    corpo_pat = re.escape(pref) + r"-\d+" if pref else r"[A-Z]{2,8}-\d+"
+    padrao_url = re.compile(r"/portal/\d+/(" + corpo_pat + r")")
+    padrao_txt = re.compile(r"\b" + corpo_pat + r"\b")
     log(f"   [enviar] URL antes do envio: {url_antes}")
 
     if not _clicar_enviar(jira, log):
         log("   [enviar] FALHA: formulario NAO foi enviado (botao Enviar "
             "indisponivel; provavel campo obrigatorio faltando). Codigo='??-?'.")
+        salvar_diagnostico(jira, "botao_enviar_indisponivel", log)
         return "??-?", jira.url
 
     fim = time.time() + timeout_s
@@ -286,4 +323,5 @@ def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
 
     log(f"   [enviar] codigo NAO encontrado apos {timeout_s}s (URL: {jira.url}) "
         "-> '??-?'.")
+    salvar_diagnostico(jira, "codigo_nao_capturado", log)
     return "??-?", jira.url

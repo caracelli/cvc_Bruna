@@ -167,7 +167,12 @@ def processar_demo(outlook, jira):
                          if e["id"] in ids), None)
             if not alvo:
                 break
-            mover_para_inbox(outlook, alvo["indice"])
+            if not mover_para_inbox(outlook, alvo["indice"]):
+                # nao conseguiu mover este e-mail de volta -> tira da fila p/
+                # NAO ficar tentando o mesmo em loop (ja salvou diagnostico).
+                print(f"   [DEMO][AVISO] nao movi de volta o e-mail id={alvo['id']}; "
+                      "veja a pasta 'diagnostico'. Segue com os demais.")
+                ids.discard(alvo["id"])
             time.sleep(1)
         abrir_inbox_compartilhada(outlook, CAIXA)
         _aguardar_lista(outlook)

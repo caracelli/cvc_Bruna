@@ -48,12 +48,16 @@ JIRA_TIPO_SOLICITUD = _txt("jira/tipo_solicitud", "forms")
 JIRA_COR_TITULO = _txt("jira/cor_titulo", "Verde-azulado forte")
 JIRA_CAT_PREFIXO = _txt("jira/categoria_prefixo", "JIRA -")
 JIRA_TRANSICAO_CANCELAR = _txt("jira/transicao_cancelar", "Cancelado pelo Solicitante")
+# prefixo do codigo do chamado (ex.: "GAAR"). Se preenchido, a captura do
+# codigo pos-envio SO aceita tokens que comecam com ele -> blinda contra pegar
+# um "ABC-123" que estava no corpo do e-mail. Vazio = aceita qualquer prefixo.
+JIRA_PREFIXO_CHAMADO = _txt("jira/prefixo_chamado", "")
 # base do portal (…/portal/1984/) derivada da URL de criacao, p/ abrir o chamado
 JIRA_PORTAL_BASE = URL_JIRA.split("/group/")[0].rstrip("/") + "/"
 
 # ---- Fluxo ----
 REMETENTE_FILTRO = _txt("fluxo/remetente_filtro", "Microsoft Forms")
-SUBPASTA_DESTINO = _txt("fluxo/subpasta_destino", "Finalizado")
+SUBPASTA_DESTINO = _txt("fluxo/subpasta_destino", "Finalizados")
 SO_NAO_LIDOS = _bool("fluxo/so_nao_lidos", True)
 MARCAR_COMO_LIDO = _bool("fluxo/marcar_como_lido", True)
 ENCERRAR_SESSOES_NO_FIM = _bool("fluxo/encerrar_sessoes_no_fim", True)

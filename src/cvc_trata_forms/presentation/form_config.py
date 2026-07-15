@@ -45,6 +45,7 @@ def _ler():
     v["jira_tipo"] = g("jira/tipo_solicitud", "forms")
     v["jira_cor"] = g("jira/cor_titulo", "Verde-azulado forte")
     v["jira_prefixo"] = g("jira/categoria_prefixo", "JIRA -")
+    v["jira_prefixo_chamado"] = g("jira/prefixo_chamado", "")
     v["flx_remetente"] = g("fluxo/remetente_filtro", "Microsoft Forms")
     v["flx_subpasta"] = g("fluxo/subpasta_destino", "Finalizados")
     v["flx_so_nao_lidos"] = g("fluxo/so_nao_lidos", "true")
@@ -92,6 +93,8 @@ def _salvar(vals):
     <tipo_solicitud>{e(vals['jira_tipo'])}</tipo_solicitud>
     <cor_titulo>{e(vals['jira_cor'])}</cor_titulo>
     <categoria_prefixo>{e(vals['jira_prefixo'])}</categoria_prefixo>
+    <!-- Opcional: prefixo do codigo do chamado (ex.: GAAR). Vazio = qualquer. -->
+    <prefixo_chamado>{e(vals['jira_prefixo_chamado'])}</prefixo_chamado>
   </jira>
 
   <!-- Regras do fluxo -->
@@ -180,6 +183,9 @@ def main():
     linha(g, "URL do chamado", "jira_url")
     linha(g, "Tipo de solicitação", "jira_tipo")
     linha(g, "Cor do título", "jira_cor")
+    linha(g, "Prefixo do chamado", "jira_prefixo_chamado")
+    ttk.Label(g, text="Prefixo do código do chamado (ex.: GAAR). Opcional — vazio = qualquer.",
+              foreground="#666").pack(anchor="w", pady=(6, 0))
 
     # --- Aba Encaminhamento ---
     g = aba("Encaminhamento")
@@ -211,6 +217,8 @@ def main():
             vals[k] = var.get()
         # campos nao editaveis no form, mas preservados no config.xml
         vals.setdefault("jira_prefixo", dados.get("jira_prefixo", "JIRA -"))
+        vals.setdefault("jira_prefixo_chamado",
+                        dados.get("jira_prefixo_chamado", ""))
         vals.setdefault("enc_sep", dados.get("enc_sep", ""))
         try:
             int(str(vals["flx_intervalo"]).strip() or "5")
