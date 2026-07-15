@@ -227,11 +227,12 @@ def _enviar_por_enter(jira, log=print):
 
 
 def _clicar_enviar(jira, log=print):
-    """Envia o formulario. 1o tenta CLICAR o botao (VISIVEL + HABILITADO, rola
-    ate ele, retry pois a validacao do form e assincrona; por rotulo pt/es/en
-    e por ultimo button[type=submit]). Se nenhum clique disparar, cai no
-    fallback por ENTER (_enviar_por_enter). Retorna True se conseguiu enviar
-    (por clique OU por Enter); loga os botoes disponiveis antes do fallback."""
+    """Tenta CLICAR o botao de enviar (VISIVEL + HABILITADO, rola ate ele, com
+    retry pois a validacao do form e assincrona; por rotulo pt/es/en e por
+    ultimo button[type=submit]). Retorna True se DISPAROU algum clique (sem
+    erro), False se nao achou botao clicavel. ATENCAO: True aqui NAO garante
+    que o form foi submetido — o .click() do Playwright pode 'dar certo' sem
+    efeito; quem confirma o envio e a captura do codigo (via ENTER se preciso)."""
     rotulos = ["Enviar", "Criar", "Crear", "Create", "Send"]
     for _ in range(4):
         for nome in rotulos:
@@ -261,46 +262,13 @@ def _clicar_enviar(jira, log=print):
     log("   [enviar] NENHUM botao de envio respondeu ao clique. Botoes na pagina:")
     for txt, vis, en in _listar_botoes(jira):
         log(f"      - '{txt}' visivel={vis} habilitado={en}")
-    # fallback por teclado: o clique nao dispara em algumas maquinas, mas o
-    # ENTER envia o formulario (comportamento confirmado na maquina do cliente).
-    return _enviar_por_enter(jira, log)
+    return False
 
 
-def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
-    """Clica em Enviar e captura (codigo, link) do chamado criado.
-
-    IMPORTANTE (validado ao vivo, GAAR-27): ESTE portal do JSM NAO redireciona
-    apos o envio — a URL continua no formulario (.../create/<n>) e o chamado
-    criado aparece como CONFIRMACAO no CORPO da pagina (ex.: 'GAAR-27'). Por
-    isso NAO da pra capturar pela URL nem derivar o link dela.
-
-    Estrategia:
-      1. clica Enviar de forma robusta (visivel+habilitado, com retry).
-      2. AGUARDA o codigo surgir — pela URL (caso algum portal redirecione) OU
-         pelo CORPO — o que vier primeiro (poll a cada 0.5s). Assim capturamos
-         assim que o chamado e criado, sem esperar um redirect que nao vem.
-      3. deriva o LINK do chamado como JIRA_PORTAL_BASE + codigo (mesma forma
-         usada — e validada — por cancelar_chamado).
-
-    Retorna (codigo, link). Se o envio/captura falhar, retorna ('??-?', url_atual)
-    e LOGA o diagnostico (o caller aborta p/ nao encaminhar com dados errados)."""
-    url_antes = jira.url
-    # Se um prefixo de chamado esta configurado (ex.: 'GAAR'), a captura SO
-    # aceita tokens com esse prefixo -> blinda contra pegar um 'ABC-123' que
-    # ja estava no corpo do e-mail Forms. Vazio = aceita qualquer prefixo.
-    pref = (JIRA_PREFIXO_CHAMADO or "").strip().rstrip("-")
-    corpo_pat = re.escape(pref) + r"-\d+" if pref else r"[A-Z]{2,8}-\d+"
-    padrao_url = re.compile(r"/portal/\d+/(" + corpo_pat + r")")
-    padrao_txt = re.compile(r"\b" + corpo_pat + r"\b")
-    log(f"   [enviar] URL antes do envio: {url_antes}")
-
-    if not _clicar_enviar(jira, log):
-        log("   [enviar] FALHA: formulario NAO foi enviado (botao Enviar "
-            "indisponivel; provavel campo obrigatorio faltando). Codigo='??-?'.")
-        salvar_diagnostico(jira, "botao_enviar_indisponivel", log)
-        return "??-?", jira.url
-
-    fim = time.time() + timeout_s
+def _aguardar_codigo(jira, padrao_url, padrao_txt, url_antes, log, espera_s):
+    """Poll por 'espera_s' aguardando o codigo do chamado surgir (pela URL OU
+    pelo CORPO). Retorna (codigo, link) se achar; (None, None) se estourar."""
+    fim = time.time() + espera_s
     while time.time() < fim:
         # 1) algum portal redireciona p/ a pagina do chamado -> pega da URL
         m = padrao_url.search(jira.url)
@@ -320,8 +288,57 @@ def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
             log(f"   [enviar] chamado criado (via corpo): {codigo}  ({link})")
             return codigo, link
         time.sleep(0.5)
+    return None, None
 
-    log(f"   [enviar] codigo NAO encontrado apos {timeout_s}s (URL: {jira.url}) "
+
+def enviar_e_capturar_codigo(jira, log=print, timeout_s=40):
+    """Envia o chamado e captura (codigo, link) do chamado criado.
+
+    IMPORTANTE (validado ao vivo, GAAR-27): ESTE portal do JSM NAO redireciona
+    apos o envio — a URL continua no formulario (.../create/<n>) e o chamado
+    criado aparece como CONFIRMACAO no CORPO da pagina (ex.: 'GAAR-27').
+
+    Estrategia robusta a "clique que nao submete" (o .click() do Playwright as
+    vezes 'da certo' sem efeito na maquina do cliente):
+      1. CLICA em Enviar e aguarda ~12s o codigo surgir.
+      2. Se o PROXIMO PASSO nao ocorre (o codigo NAO aparece), cai no FALLBACK
+         por ENTER e aguarda o resto do tempo. Ou seja, o ENTER dispara pela
+         AUSENCIA do codigo — nao por o clique lancar excecao.
+      3. deriva o LINK como JIRA_PORTAL_BASE + codigo.
+
+    Retorna (codigo, link). Se falhar, retorna ('??-?', url_atual), salva
+    diagnostico (print+HTML) e LOGA (o caller aborta p/ nao encaminhar errado)."""
+    url_antes = jira.url
+    # Se um prefixo de chamado esta configurado (ex.: 'GAAR'), a captura SO
+    # aceita tokens com esse prefixo -> blinda contra pegar um 'ABC-123' que
+    # ja estava no corpo do e-mail Forms. Vazio = aceita qualquer prefixo.
+    pref = (JIRA_PREFIXO_CHAMADO or "").strip().rstrip("-")
+    corpo_pat = re.escape(pref) + r"-\d+" if pref else r"[A-Z]{2,8}-\d+"
+    padrao_url = re.compile(r"/portal/\d+/(" + corpo_pat + r")")
+    padrao_txt = re.compile(r"\b" + corpo_pat + r"\b")
+    log(f"   [enviar] URL antes do envio: {url_antes}")
+
+    # --- Tentativa 1: CLICAR o botao e aguardar um pouco o codigo ---
+    espera_pos_clique = min(12, timeout_s)
+    if _clicar_enviar(jira, log):
+        codigo, link = _aguardar_codigo(jira, padrao_url, padrao_txt,
+                                        url_antes, log, espera_pos_clique)
+        if codigo:
+            return codigo, link
+        log(f"   [enviar] cliquei mas o codigo NAO apareceu em "
+            f"{espera_pos_clique}s -> o clique pode nao ter submetido; "
+            "tentando ENTER.")
+    else:
+        log("   [enviar] nenhum botao respondeu ao clique -> tentando ENTER.")
+
+    # --- Tentativa 2: FALLBACK por ENTER e aguardar o resto do tempo ---
+    _enviar_por_enter(jira, log)
+    codigo, link = _aguardar_codigo(jira, padrao_url, padrao_txt,
+                                    url_antes, log, timeout_s)
+    if codigo:
+        return codigo, link
+
+    log(f"   [enviar] codigo NAO encontrado apos clique+ENTER (URL: {jira.url}) "
         "-> '??-?'.")
     salvar_diagnostico(jira, "codigo_nao_capturado", log)
     return "??-?", jira.url
