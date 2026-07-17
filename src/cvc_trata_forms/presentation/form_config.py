@@ -211,8 +211,13 @@ def main():
     check(g, "Só não lidos", "flx_so_nao_lidos")
     check(g, "Marcar como lido", "flx_marcar_lido")
     check(g, "Encerrar sessões no fim", "flx_encerrar")
+    check(g, "DEMO (faz o ciclo e DESFAZ — demonstra sem deixar resíduo)",
+          "flx_demo")
     check(g, "DRY-RUN (ensaio, não cria/envia nada)", "flx_dry_run")
     check(g, "Invisível (esconde o navegador)", "flx_invisivel")
+    ttk.Label(g, text="DEMO tem prioridade sobre DRY-RUN. Desmarque os dois "
+                      "para o modo REAL (produção).",
+              foreground="#666").pack(anchor="w", pady=(6, 0))
 
     # --- Barra de botoes (fixa embaixo, fora das abas) ---
     barra = ttk.Frame(cont)
