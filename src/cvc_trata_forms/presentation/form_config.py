@@ -52,6 +52,10 @@ def _ler():
     v["flx_marcar_lido"] = g("fluxo/marcar_como_lido", "true")
     v["flx_encerrar"] = g("fluxo/encerrar_sessoes_no_fim", "true")
     v["flx_dry_run"] = g("fluxo/dry_run", "true")
+    # demo/demo_qtd nao tem campo no form, mas sao PRESERVADOS ao salvar
+    # (senao o cadastro do 1o uso apagaria o modo DEMO do pacote).
+    v["flx_demo"] = g("fluxo/demo", "false")
+    v["flx_demo_qtd"] = g("fluxo/demo_qtd", "1")
     v["flx_intervalo"] = g("fluxo/intervalo_min", "5")
     v["flx_invisivel"] = g("fluxo/invisivel", "true")
     v["enc_ativo"] = g("encaminhamento/ativo", "true")
@@ -105,6 +109,9 @@ def _salvar(vals):
     <marcar_como_lido>{_b(vals['flx_marcar_lido'])}</marcar_como_lido>
     <encerrar_sessoes_no_fim>{_b(vals['flx_encerrar'])}</encerrar_sessoes_no_fim>
     <dry_run>{_b(vals['flx_dry_run'])}</dry_run>
+    <!-- DEMO (self-cleaning): faz o ciclo REAL e DESFAZ. Prioridade sobre dry_run. -->
+    <demo>{_b(vals['flx_demo'])}</demo>
+    <demo_qtd>{e(str(vals['flx_demo_qtd']))}</demo_qtd>
     <intervalo_min>{e(str(vals['flx_intervalo']))}</intervalo_min>
     <invisivel>{_b(vals['flx_invisivel'])}</invisivel>
   </fluxo>
@@ -220,6 +227,10 @@ def main():
         vals.setdefault("jira_prefixo_chamado",
                         dados.get("jira_prefixo_chamado", ""))
         vals.setdefault("enc_sep", dados.get("enc_sep", ""))
+        # demo/demo_qtd nao tem campo no form -> preserva o que ja estava no
+        # config.xml (mantem o modo DEMO do pacote apos o cadastro inicial).
+        vals.setdefault("flx_demo", dados.get("flx_demo", "false"))
+        vals.setdefault("flx_demo_qtd", dados.get("flx_demo_qtd", "1"))
         try:
             int(str(vals["flx_intervalo"]).strip() or "5")
         except ValueError:
