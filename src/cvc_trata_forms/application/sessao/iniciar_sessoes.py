@@ -288,6 +288,119 @@ def _abortar_credencial(e, popup_proc=None):
             pass
 
 
+def _avisar_senha_invalida(tentativa=1, total=3, log=print):
+    """Aviso EXPLICITO (janela) de que a senha foi rejeitada e que as
+    Configuracoes vao abrir p/ informar a correta. Na 1a vez sugere expiracao/
+    alteracao; nas seguintes, alerta p/ CONFERIR A DIGITACAO. Sem isto o
+    formulario abriria 'do nada' e o usuario nao saberia o porque."""
+    if tentativa <= 1:
+        motivo = ("A senha da conta do Outlook foi REJEITADA pela Microsoft "
+                  "(provavelmente EXPIROU ou foi ALTERADA).")
+    else:
+        motivo = ("A senha informada AINDA está incorreta. "
+                  "Confira a digitação (maiúsculas/minúsculas e espaços).")
+    texto = (f"{motivo}\n\n"
+             f"Tentativa {tentativa} de {total}.\n\n"
+             "Vou abrir as Configurações para você informar a senha.\n"
+             "Depois de salvar, o login continua automaticamente.")
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        r = tk.Tk()
+        r.withdraw()
+        r.attributes("-topmost", True)
+        messagebox.showwarning("Senha inválida ou expirada", texto, parent=r)
+        r.destroy()
+    except Exception as e:  # noqa: BLE001
+        log(f"   (nao consegui exibir o aviso de senha: {e})")
+
+
+def _encerrar_senha_invalida(popup_proc=None, log=print):
+    """Mensagem AMIGAVEL final quando a senha nao foi validada apos varias
+    tentativas: pede p/ atualizar a senha e tentar mais tarde, e encerra
+    (fecha o fechador de popups). Sem stack trace / instrucoes tecnicas."""
+    texto = ("Não foi possível validar a senha após várias tentativas.\n\n"
+             "Verifique a senha correta da sua conta e abra o aplicativo "
+             "novamente mais tarde para tentar de novo.")
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        r = tk.Tk()
+        r.withdraw()
+        r.attributes("-topmost", True)
+        messagebox.showerror("Login não concluído", texto, parent=r)
+        r.destroy()
+    except Exception as e:  # noqa: BLE001
+        log(f"   (aviso final de senha: {e})")
+    log("\n" + "!" * 70)
+    log("  [ERRO] Senha nao validada apos varias tentativas. Atualize a senha "
+        "e tente novamente mais tarde.")
+    log("!" * 70)
+    if popup_proc is not None:
+        try:
+            popup_proc.terminate()
+        except Exception:
+            pass
+
+
+def _abrir_form_config_e_esperar(log=print):
+    """Abre o formulario de configuracao (edita o config.xml) e ESPERA ele
+    fechar. Frozen-aware: no .exe usa 'exe --config'; no codigo, 'python -m
+    ...form_config'. Usado quando a senha salva foi rejeitada, p/ o usuario
+    informar a senha nova sem sair do fluxo."""
+    try:
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable, "--config"]
+        else:
+            cmd = [sys.executable, "-m",
+                   "cvc_trata_forms.presentation.form_config"]
+        subprocess.Popen(cmd, creationflags=0x08000000).wait()   # espera fechar
+        return True
+    except Exception as e:  # noqa: BLE001
+        log(f"   (nao consegui abrir o formulario de config: {e})")
+        return False
+
+
+def _recarregar_credenciais(log=print):
+    """Recarrega o config.xml do disco (o config_app cacheia os valores no
+    import) e devolve (email, senha) ATUALIZADOS."""
+    try:
+        import importlib
+        from cvc_trata_forms.infrastructure.config import config_app as _cfg
+        importlib.reload(_cfg)
+    except Exception as e:  # noqa: BLE001
+        log(f"   (falha ao recarregar o config: {e})")
+    return obter_outlook()
+
+
+def _login_com_retry(login_fn, page, popup_proc, nome, log=print,
+                     max_tentativas=3):
+    """Executa login_fn(page, email, senha). Se a Microsoft REJEITAR a senha
+    (CredencialInvalida), AVISA e abre o formulario de config para o usuario
+    informar a senha correta, recarrega o config e tenta de novo. Repete ate
+    'max_tentativas' (cobre erro de DIGITACAO). Esgotando as tentativas,
+    ENCERRA com uma mensagem amigavel (atualize a senha e tente mais tarde).
+    Retorna (ok, abortar). abortar=True quando desistiu."""
+    email, senha = obter_outlook()
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            ok = login_fn(page, email, senha, log=log)
+            return ok, False
+        except CredencialInvalida as e:
+            log(f"  [SENHA] {e}  ({nome}) - tentativa {tentativa}/{max_tentativas}")
+            if tentativa >= max_tentativas:
+                _encerrar_senha_invalida(popup_proc, log)   # desiste (amigavel)
+                return False, True
+            _avisar_senha_invalida(tentativa, max_tentativas, log)
+            _abrir_form_config_e_esperar(log)
+            email, senha = _recarregar_credenciais(log)
+            if not (email and senha):
+                _encerrar_senha_invalida(popup_proc, log)
+                return False, True
+            log(f"   Tentando {nome} de novo p/ {email}...")
+    return False, False
+
+
 _PW = None   # sessao Playwright atual (fechada no fim por main())
 
 
@@ -351,10 +464,10 @@ def _main_impl():
         print(f"   Credencial encontrada para {email}.")
         print("   Tentando login automatico (o MFA sera com voce)...")
         try:
-            ok_outlook = login_outlook(outlook, email, senha, log=print)
-        except CredencialInvalida as e:
-            _abortar_credencial(e, popup_proc)
-            return
+            ok_outlook, abortar = _login_com_retry(
+                login_outlook, outlook, popup_proc, "OUTLOOK", log=print)
+            if abortar:
+                return
         except Exception as e:
             print(f"   (login automatico falhou: {e})")
             ok_outlook = False
@@ -390,10 +503,10 @@ def _main_impl():
     if email and senha and not jira_logado(jira):
         print("   Tentando login automatico no Jira (SSO Microsoft)...")
         try:
-            ok_jira = login_jira(jira, email, senha, log=print)
-        except CredencialInvalida as e:
-            _abortar_credencial(e, popup_proc)
-            return
+            ok_jira, abortar = _login_com_retry(
+                login_jira, jira, popup_proc, "JIRA", log=print)
+            if abortar:
+                return
         except Exception as e:
             print(f"   (login Jira falhou: {e})")
             ok_jira = False

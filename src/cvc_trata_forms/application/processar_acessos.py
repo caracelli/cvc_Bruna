@@ -99,6 +99,17 @@ def _aguardar_lista(outlook):
         time.sleep(2)
 
 
+def _focar(page):
+    """Traz a aba (Outlook/Jira) para a frente no Edge, para acompanhar o fluxo
+    ao vivo: Outlook enquanto le/encaminha o e-mail, Jira enquanto cria o
+    chamado. Silencioso e tolerante a falha (nao interrompe o fluxo)."""
+    try:
+        page.bring_to_front()
+        time.sleep(0.3)
+    except Exception:
+        pass
+
+
 def processar_demo(outlook, jira):
     """MODO DEMO (self-cleaning): processa ate DEMO_QTD e-mails de VERDADE
     (cria chamado + encaminha + marca lido + move) e DEPOIS DESFAZ (cancela o
@@ -106,6 +117,7 @@ def processar_demo(outlook, jira):
     deixar residuo. Retorna (feitos, feitos)."""
     print("=" * 60)
     print(f">> MODO DEMO (faz e desfaz) - ate {DEMO_QTD} e-mail(s)")
+    _focar(outlook)                  # mostra o Outlook enquanto busca o e-mail
     abrir_inbox_compartilhada(outlook, CAIXA)
     _aguardar_lista(outlook)
     n = pesquisar_forms(outlook, REMETENTE_FILTRO or "Microsoft Forms")
@@ -120,9 +132,10 @@ def processar_demo(outlook, jira):
             if not alvo:
                 break
             e = alvo[0]
+            _focar(outlook)          # mostra o Outlook enquanto le o e-mail
             dados = extrair_email(outlook, e["indice"])
             print(f"\n>> [DEMO] criando chamado p/: {dados['titulo']}")
-            jira.bring_to_front()
+            _focar(jira)             # mostra o Jira enquanto cria o chamado
             jira.goto(URL_JIRA, wait_until="domcontentloaded")   # form de criacao
             time.sleep(2)
             if not preencher_formulario(jira, dados):
@@ -135,7 +148,7 @@ def processar_demo(outlook, jira):
                       "Veja o diagnostico [enviar]/[form] acima no log.")
                 break
             print(f"   [DEMO] chamado criado: {codigo}  ({link})")
-            outlook.bring_to_front()
+            _focar(outlook)          # volta ao Outlook p/ encaminhar/mover
             if ENCAMINHAR_ATIVO and ENCAMINHAR_DESTINATARIOS:
                 assunto = ENCAMINHAR_ASSUNTO.format(ticket=codigo,
                                                     assunto=dados["titulo"])
@@ -155,10 +168,11 @@ def processar_demo(outlook, jira):
     # ---- FASE 2: DESFAZ (cancela chamado + volta e-mail nao lido) ----
     if feitos:
         print(">> [DEMO] FASE 2: cancelando chamados e voltando os e-mails...")
+        _focar(jira)                 # mostra o Jira enquanto cancela
         for _id, _res, codigo in feitos:
             cancelar_chamado(jira, codigo, JIRA_PORTAL_BASE,
                              JIRA_TRANSICAO_CANCELAR, log=print)
-        outlook.bring_to_front()
+        _focar(outlook)              # volta ao Outlook p/ restaurar o e-mail
         abrir_subpasta(outlook, CAIXA, SUBPASTA_DESTINO)
         _aguardar_lista(outlook)
         ids = {x[0] for x in feitos}
@@ -189,6 +203,7 @@ def processar(outlook, jira):
     Retorna (encontrados, processados)."""
     if DEMO:
         return processar_demo(outlook, jira)
+    _focar(outlook)                  # mostra o Outlook enquanto busca o e-mail
     aberto = abrir_inbox_compartilhada(outlook, CAIXA)
     print(f">> Caixa de Entrada: {aberto}")
 
@@ -235,9 +250,10 @@ def processar(outlook, jira):
             if not alvo:
                 break
             e = alvo[0]
+            _focar(outlook)          # mostra o Outlook enquanto le o e-mail
             dados = extrair_email(outlook, e["indice"])
             print(f"\n>> Processando: {dados['titulo']}")
-            jira.bring_to_front()
+            _focar(jira)             # mostra o Jira enquanto cria o chamado
             if not preencher_formulario(jira, dados):
                 print("   [ERRO] nao preencheu o formulario; parando.")
                 break
@@ -249,7 +265,7 @@ def processar(outlook, jira):
                       "[form] acima no log.")
                 break
             print(f"   Chamado criado: {codigo}  ({link})")
-            outlook.bring_to_front()
+            _focar(outlook)          # volta ao Outlook p/ encaminhar/mover
             # NOTIFICA o grupo: encaminha com o nº do chamado no assunto + link
             # clicavel no corpo (sem categoria -> nao acumula lista-mestre).
             if ENCAMINHAR_ATIVO and ENCAMINHAR_DESTINATARIOS:
