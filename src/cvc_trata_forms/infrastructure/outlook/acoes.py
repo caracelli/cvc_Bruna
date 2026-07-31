@@ -319,6 +319,28 @@ _NAO_ENVIAR = ("nao enviar", "não enviar", "don't send", "dont send",
                "cancelar", "cancel", "descartar", "discard")
 
 
+def _descrever_dialogo(dlg, log=None):
+    """Registra no log o texto e os botoes do dialogo que apareceu. E o que
+    permite identificar o popup na maquina do cliente so pelo log, sem
+    precisar do print/HTML do diagnostico."""
+    if not log:
+        return
+    try:
+        texto = " ".join((dlg.inner_text() or "").split())[:160]
+        botoes = dlg.get_by_role("button")
+        nomes = []
+        for i in range(botoes.count()):
+            try:
+                t = " ".join((botoes.nth(i).inner_text() or "").split())
+            except Exception:
+                continue
+            if t:
+                nomes.append(t)
+        log(f"   [encaminhar] popup na tela: \"{texto}\" | botoes={nomes}")
+    except Exception:
+        pass
+
+
 def _clicar_confirmacao(escopo, log=None, onde="popup"):
     """Procura em 'escopo' o botao que CONFIRMA o envio e clica nele.
     Nunca clica no que cancela (_NAO_ENVIAR). True se clicou."""
@@ -367,6 +389,7 @@ def _confirmar_popup_enviar(outlook, log=None, espera_s=4):
         except Exception:
             visivel = False
         if visivel:
+            _descrever_dialogo(dlg.first, log)
             if _clicar_confirmacao(dlg.first, log, "popup de anexo"):
                 return True
             # dialogo aberto e nenhum botao casou: pode ser outro texto ou
