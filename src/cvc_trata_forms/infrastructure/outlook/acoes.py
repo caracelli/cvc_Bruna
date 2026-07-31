@@ -229,6 +229,68 @@ def _inserir_url_no_dialogo(outlook, link):
     time.sleep(0.6)
 
 
+def _selecionar_ticket_no_corpo(corpo, ticket):
+    """Seleciona EXATAMENTE o texto do ticket dentro do corpo, via Range do DOM.
+
+    Antes a selecao era por teclado (Control+Home + N setas p/ pular o prefixo
+    + N com Shift). Quando o Control+Home NAO levava o cursor pro inicio do
+    corpo (acontece no OWA conforme o foco/layout), as setas andavam a partir
+    do lugar errado e o link caia numa palavra qualquer do separador (ex.:
+    'riginal', de 'Mensagem original'). Aqui a posicao vem do TEXTO, nao de
+    contagem de teclas. Retorna True se achou e selecionou o ticket."""
+    return bool(corpo.evaluate(
+        """(el, alvo) => {
+            // mapeia os nos de texto do corpo com o offset acumulado, pra
+            // achar o ticket mesmo se ele estiver quebrado em varios nos
+            const nos = [];
+            const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            let n, texto = "";
+            while ((n = w.nextNode())) {
+                nos.push([n, texto.length]);
+                texto += n.nodeValue;
+            }
+            const ini = texto.indexOf(alvo);   // 1a ocorrencia = nossa linha
+            if (ini < 0) return false;
+            const fim = ini + alvo.length;
+            let noI = null, offI = 0, noF = null, offF = 0;
+            for (const [no, base] of nos) {
+                const len = no.nodeValue.length;
+                if (noI === null && ini >= base && ini < base + len) {
+                    noI = no; offI = ini - base;
+                }
+                if (noF === null && fim > base && fim <= base + len) {
+                    noF = no; offF = fim - base;
+                }
+            }
+            if (!noI || !noF) return false;
+            const r = document.createRange();
+            r.setStart(noI, offI);
+            r.setEnd(noF, offF);
+            const s = window.getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            return true;
+        }""", ticket))
+
+
+def _conferir_link_do_ticket(corpo, ticket, link):
+    """Confere no DOM se o hyperlink ficou no numero do chamado.
+    {ok: existe <a> cujo texto e o ticket, errado: [textos dos <a> que apontam
+    pro link do chamado mas NAO sao o ticket]} - 'errado' e o sintoma da falha
+    antiga (link na palavra do separador)."""
+    return corpo.evaluate(
+        """(el, args) => {
+            const as = Array.from(el.querySelectorAll('a'));
+            const txt = (a) => (a.textContent || '').trim();
+            return {
+                ok: as.some(a => txt(a) === args.ticket),
+                errado: as.filter(a => txt(a) !== args.ticket &&
+                                       (a.getAttribute('href') || '') === args.link)
+                          .map(txt).slice(0, 3),
+            };
+        }""", {"ticket": ticket, "link": link})
+
+
 def _confirmar_popup_enviar(outlook):
     """Trata o popup 'parece que esqueceu de anexar' (botoes 'Enviar' /
     'Nao enviar') que aparece ao enviar. Clica 'Enviar' se surgir."""
@@ -319,16 +381,31 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
     time.sleep(0.3)
 
     # transforma SO o ticket em HYPERLINK (por ultimo, pra nao depender de
-    # digitar nada apos fechar o dialogo do link)
-    outlook.keyboard.press("Control+Home")
-    for _ in range(len(pref)):
-        outlook.keyboard.press("ArrowRight")
-    for _ in range(len(ticket)):
-        outlook.keyboard.press("Shift+ArrowRight")
-    time.sleep(0.3)
-    outlook.keyboard.press("Control+k")
-    _inserir_url_no_dialogo(outlook, link)
-    time.sleep(0.4)
+    # digitar nada apos fechar o dialogo do link). A selecao vem do TEXTO
+    # (Range no DOM) - contagem de setas errava a posicao no cliente.
+    corpo.click()          # foco no corpo (o Ctrl+K age na selecao do editor)
+    time.sleep(0.2)
+    if not _selecionar_ticket_no_corpo(corpo, ticket):
+        log(f"   [encaminhar] nao achei '{ticket}' no corpo p/ aplicar o link; "
+            "segue com o numero em texto puro.")
+        salvar_diagnostico(outlook, "encaminhar_ticket_nao_achado", log)
+    else:
+        outlook.keyboard.press("Control+k")
+        _inserir_url_no_dialogo(outlook, link)
+        time.sleep(0.4)
+        conf = _conferir_link_do_ticket(corpo, ticket, link)
+        if conf.get("errado"):
+            # link colou em outra palavra (bug 'riginal') -> NAO manda torto
+            log(f"   [encaminhar] o link caiu em {conf['errado']} em vez de "
+                f"'{ticket}'. Abortando o envio.")
+            salvar_diagnostico(outlook, "encaminhar_link_palavra_errada", log)
+            raise RuntimeError(
+                f"hyperlink aplicado no texto errado ({conf['errado']}), "
+                f"esperado '{ticket}'.")
+        if not conf.get("ok"):
+            log(f"   [encaminhar] o numero '{ticket}' ficou sem hyperlink "
+                "(dialogo do link nao aplicou); envio segue mesmo assim.")
+            salvar_diagnostico(outlook, "encaminhar_link_nao_aplicado", log)
 
     # Enviar (+ trata popup de anexos)
     outlook.get_by_role("button", name="Enviar", exact=False).first.click()
