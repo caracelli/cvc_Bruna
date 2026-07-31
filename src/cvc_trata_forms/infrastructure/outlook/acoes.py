@@ -264,9 +264,11 @@ def _esperar_compose_fechar(outlook, timeout_s):
 def _enviar_compose(outlook, log, timeout_s=12):
     """Envia o e-mail e CONFIRMA que saiu (compose fechou).
 
-    O clique no 'Enviar' pode 'dar certo' sem enviar nada - mesmo sintoma que
-    ja tinhamos no envio do chamado no Jira. Por isso o sucesso nao e o clique
-    e sim o compose fechar; se nao fechar, cai no atalho do OWA (Ctrl+Enter)."""
+    Na maquina do cliente o clique no 'Enviar' "da certo" sem enviar nada e o
+    e-mail fica em RASCUNHOS - mesmo sintoma que ja tinhamos no envio do
+    chamado no Jira. Por isso o sucesso nao e o clique e sim o compose fechar,
+    e sao 3 tentativas em escada: clique do Playwright -> Ctrl+Enter (atalho do
+    OWA, com o foco no corpo) -> click() disparado no proprio DOM."""
     btn = outlook.get_by_role("button", name="Enviar", exact=False)
     if btn.count() > 0:
         try:
@@ -279,8 +281,30 @@ def _enviar_compose(outlook, log, timeout_s=12):
     if _esperar_compose_fechar(outlook, timeout_s):
         return True
 
-    log("   [encaminhar] o clique nao enviou; tentando Ctrl+Enter (atalho do OWA).")
+    # 2a: atalho do teclado. Antes garante o foco DENTRO do compose, senao a
+    # tecla nao chega nele (clicar no corpo nao envia nada, e seguro).
+    log("   [encaminhar] o clique nao enviou (e-mail ficou em rascunhos); "
+        "tentando Ctrl+Enter (atalho do OWA).")
+    caixa = outlook.locator("[role='textbox'][aria-label='Corpo da mensagem']")
+    if caixa.count() > 0:
+        try:
+            caixa.first.click()
+        except Exception:
+            pass
     outlook.keyboard.press("Control+Enter")
+    _confirmar_popup_enviar(outlook)
+    if _esperar_compose_fechar(outlook, timeout_s):
+        return True
+
+    # 3a: dispara o click no proprio elemento, pelo DOM (contorna overlay/
+    # camada invisivel que engole o clique do mouse)
+    log("   [encaminhar] Ctrl+Enter tambem nao enviou; tentando o clique "
+        "pelo DOM.")
+    if btn.count() > 0:
+        try:
+            btn.first.evaluate("el => el.click()")
+        except Exception as e:
+            log(f"   [encaminhar] clique pelo DOM falhou ({e}).")
     _confirmar_popup_enviar(outlook)
     return _esperar_compose_fechar(outlook, timeout_s)
 
