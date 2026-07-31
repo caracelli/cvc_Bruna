@@ -5,6 +5,7 @@ Recebem sempre a 'page' do Outlook (nao criam sessao).
 """
 
 import time
+from html import escape as _escapar
 
 from cvc_trata_forms.domain.regras import limpar_titulo
 from cvc_trata_forms.infrastructure.sistema.diagnostico import salvar_diagnostico
@@ -318,19 +319,15 @@ _NAO_ENVIAR = ("nao enviar", "não enviar", "don't send", "dont send",
                "cancelar", "cancel", "descartar", "discard")
 
 
-def _confirmar_popup_enviar(outlook, log=None):
-    """Trata o popup 'parece que voce esqueceu de anexar' que o OWA mostra ao
-    enviar. Clica no botao que CONFIRMA o envio e nunca no que cancela.
-
-    Antes so aceitava o texto EXATO 'Enviar' - se o botao vier como 'Enviar
-    mesmo assim' (que e o texto do popup de anexo), o clique nao acontecia e o
-    popup ficava na tela segurando o envio. Agora casa por conteudo."""
-    time.sleep(1.5)
-    dlg = outlook.locator("[role='dialog'], [role='alertdialog']")
-    if dlg.count() == 0:
+def _clicar_confirmacao(escopo, log=None, onde="popup"):
+    """Procura em 'escopo' o botao que CONFIRMA o envio e clica nele.
+    Nunca clica no que cancela (_NAO_ENVIAR). True se clicou."""
+    botoes = escopo.get_by_role("button")
+    try:
+        total = botoes.count()
+    except Exception:
         return False
-    botoes = dlg.first.get_by_role("button")
-    for i in range(botoes.count()):
+    for i in range(total):
         b = botoes.nth(i)
         try:
             if not b.is_visible():
@@ -344,8 +341,7 @@ def _confirmar_popup_enviar(outlook, log=None):
             try:
                 b.click()
                 if log:
-                    log(f"   [encaminhar] popup de anexo: cliquei em "
-                        f"'{txt}'.")
+                    log(f"   [encaminhar] {onde}: cliquei em '{txt}'.")
                 time.sleep(0.8)
                 return True
             except Exception:
@@ -353,17 +349,81 @@ def _confirmar_popup_enviar(outlook, log=None):
     return False
 
 
-def _escrever_topo(outlook, corpo, texto):
-    """Escreve 'texto' no TOPO do corpo, de uma unica vez.
+def _confirmar_popup_enviar(outlook, log=None, espera_s=4):
+    """Trata o popup 'parece que voce esqueceu de anexar' que o OWA mostra ao
+    enviar. Clica no botao que CONFIRMA o envio e nunca no que cancela.
 
-    Foca o corpo, sobe pro inicio e digita o bloco inteiro numa chamada so -
-    sem pausas no meio, que era onde o editor do OWA se re-renderizava (a
-    assinatura carrega depois do compose abrir) e comia o primeiro pedaco."""
+    Espera o popup APARECER (ele demora um pouco depois do clique em Enviar) e
+    casa o botao por conteudo - com o texto exato 'Enviar' nao pegava o
+    'Enviar mesmo assim', e o popup ficava na tela segurando o envio.
+    Se o popup estiver na tela e nenhum botao casar, salva diagnostico com o
+    HTML dele (e a unica forma de descobrir o texto/estrutura real do dialogo
+    na maquina do cliente)."""
+    fim = time.time() + espera_s
+    while time.time() < fim:
+        dlg = outlook.locator("[role='dialog'], [role='alertdialog']")
+        try:
+            visivel = dlg.count() > 0 and dlg.first.is_visible()
+        except Exception:
+            visivel = False
+        if visivel:
+            if _clicar_confirmacao(dlg.first, log, "popup de anexo"):
+                return True
+            # dialogo aberto e nenhum botao casou: pode ser outro texto ou
+            # outra estrutura -> tenta a pagina inteira e registra o HTML
+            if _clicar_confirmacao(outlook, log, "popup (busca ampla)"):
+                return True
+            if log:
+                log("   [encaminhar] popup na tela e nenhum botao de "
+                    "confirmar casou; salvando diagnostico p/ inspecao.")
+            salvar_diagnostico(outlook, "popup_enviar_sem_botao", log)
+            return False
+        time.sleep(0.4)
+    return False
+
+
+def _escrever_topo(outlook, corpo, linhas, log=None, forcar_teclado=False):
+    """Poe 'linhas' no TOPO do corpo do e-mail. Devolve 'html' ou 'teclado'.
+
+    Digitar tecla por tecla leva segundos, e nessa janela o editor do OWA se
+    re-renderiza (a assinatura carrega depois do compose abrir) e come o que ja
+    tinha sido escrito - foi assim que o e-mail saiu sem a linha do numero.
+    Por isso a 1a tentativa insere o bloco pronto numa UNICA operacao
+    (execCommand insertHTML, que passa pelo pipeline de edicao do navegador,
+    entao o editor do OWA enxerga). Se nao entrar, cai pra digitacao."""
+    if not forcar_teclado:
+        html = "".join(f"<div>{_escapar(l)}</div><div>&nbsp;</div>"
+                       for l in linhas)
+        try:
+            ok = bool(corpo.evaluate(
+                """(el, html) => {
+                    el.focus();
+                    const r = document.createRange();
+                    r.setStart(el, 0);      // topo do corpo
+                    r.collapse(true);
+                    const s = window.getSelection();
+                    s.removeAllRanges();
+                    s.addRange(r);
+                    return document.execCommand('insertHTML', false, html);
+                }""", html))
+        except Exception as e:
+            ok = False
+            if log:
+                log(f"   [encaminhar] insercao de uma vez falhou ({e}); "
+                    "vou digitar.")
+        if ok:
+            time.sleep(0.4)
+            return "html"
+
+    # fallback: digitacao ('\n' vira Enter; a linha "em branco" leva um espaco
+    # porque o OWA colapsa paragrafo vazio)
     corpo.click()
     time.sleep(0.6)          # deixa o editor assentar antes de digitar
     outlook.keyboard.press("Control+Home")
     time.sleep(0.3)
-    outlook.keyboard.type(texto)
+    outlook.keyboard.type("".join(f"{l}\n \n" for l in linhas))
+    time.sleep(0.4)
+    return "teclado"
     time.sleep(0.5)
 
 
@@ -429,22 +489,29 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
     # auto-linka sozinho.
     # garante 1 espaco entre o prefixo e o numero (o config faz strip)
     pref = (prefixo.rstrip() + " ") if prefixo.strip() else ""
-    bloco = f"{pref}{ticket}\n \n{ROTULO_LINK}{link}\n \n"
+    linhas = [f"{pref}{ticket}", f"{ROTULO_LINK}{link}"]
     if separador:
-        bloco += f"{separador}\n \n"
-    _escrever_topo(outlook, corpo, bloco)
+        linhas.append(separador)
+    modo = _escrever_topo(outlook, corpo, linhas, log)
 
     # Conferencia do corpo: NAO barra o envio. Sem Ctrl+K nao existe mais o
     # risco de e-mail torto (o link colado na palavra errada); um e-mail com o
     # numero no assunto vale muito mais que e-mail nenhum. Fica o registro.
     conf = _conferir_corpo(corpo, ticket, link)
-    if not conf.get("ticket_ok"):
-        # o editor engoliu o comeco -> reescreve SO a linha do numero no topo
-        log("   [encaminhar] o numero do chamado nao entrou no corpo (editor "
-            "ainda estava montando?); reescrevendo a linha.")
-        _escrever_topo(outlook, corpo, f"{pref}{ticket}\n \n")
+    if not conf.get("ticket_ok") or not conf.get("url_ok"):
+        # nao entrou inteiro -> refaz pelo outro caminho (se foi de uma vez,
+        # digita; se ja foi digitado, digita de novo so o que falta)
+        log(f"   [encaminhar] corpo incompleto apos escrever por '{modo}' "
+            f"(numero={conf.get('ticket_ok')}, url={conf.get('url_ok')}); "
+            "refazendo.")
+        faltando = []
+        if not conf.get("ticket_ok"):
+            faltando.append(f"{pref}{ticket}")
+        if not conf.get("url_ok"):
+            faltando.append(f"{ROTULO_LINK}{link}")
+        _escrever_topo(outlook, corpo, faltando, log, forcar_teclado=True)
         conf = _conferir_corpo(corpo, ticket, link)
-        log(f"   [encaminhar] apos reescrever: numero={conf.get('ticket_ok')}, "
+        log(f"   [encaminhar] apos refazer: numero={conf.get('ticket_ok')}, "
             f"url={conf.get('url_ok')}.")
     if not conf.get("ticket_ok") or not conf.get("url_ok"):
         log(f"   [encaminhar] conferencia do corpo: numero={conf.get('ticket_ok')}, "
