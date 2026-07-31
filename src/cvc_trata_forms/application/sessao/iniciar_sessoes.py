@@ -28,7 +28,9 @@ from playwright.sync_api import sync_playwright
 # Reaproveita a deteccao de login ja validada
 from cvc_trata_forms.application.sessao.checar_login import _esta_logado
 from cvc_trata_forms.infrastructure.credenciais.credenciais import obter_outlook
-from cvc_trata_forms.infrastructure.outlook.login_outlook import login_outlook, _ja_logado, CredencialInvalida
+from cvc_trata_forms.infrastructure.outlook.login_outlook import (
+    login_outlook, _ja_logado, CredencialInvalida,
+)
 from cvc_trata_forms.infrastructure.jira.login_jira import login_jira, jira_logado
 from cvc_trata_forms.infrastructure.sistema.winutil import trazer_edge_frente, esconder_edge
 

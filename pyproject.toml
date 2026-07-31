@@ -30,6 +30,13 @@ testpaths = ["tests"]
 line-length = 100
 extend-exclude = ["build", "dist"]
 
+[tool.ruff.lint]
+# Conjunto FIXO de regras. Sem isso o CI segue o default do ruff instalado na
+# hora ('pip install ruff', sem versao) - quando esse default mudou, a suite
+# inteira passou a acusar centenas de erros de estilo (BLE001, S110, DTZ...)
+# sem que nada no codigo tivesse mudado, e o CI comecou a falhar em todo push.
+select = ["E4", "E7", "E9", "F", "E5"]
+
 [tool.ruff.lint.per-file-ignores]
 # bandeja: faz monkeypatch do pystray ANTES dos imports (proposital).
 "src/cvc_trata_forms/presentation/bandeja.py" = ["E402"]

@@ -436,7 +436,7 @@ def _escrever_topo(outlook, corpo, linhas, log=None, forcar_teclado=False):
     (execCommand insertHTML, que passa pelo pipeline de edicao do navegador,
     entao o editor do OWA enxerga). Se nao entrar, cai pra digitacao."""
     if not forcar_teclado:
-        html = "".join(_linha_html(l) for l in linhas)
+        html = "".join(_linha_html(item) for item in linhas)
         try:
             ok = bool(corpo.evaluate(
                 """(el, html) => {
@@ -464,7 +464,8 @@ def _escrever_topo(outlook, corpo, linhas, log=None, forcar_teclado=False):
     time.sleep(0.6)          # deixa o editor assentar antes de digitar
     outlook.keyboard.press("Control+Home")
     time.sleep(0.3)
-    outlook.keyboard.type("".join(f"{_linha_texto(l)}\n \n" for l in linhas))
+    outlook.keyboard.type(
+        "".join(f"{_linha_texto(item)}\n \n" for item in linhas))
     time.sleep(0.4)
     return "teclado"
     time.sleep(0.5)

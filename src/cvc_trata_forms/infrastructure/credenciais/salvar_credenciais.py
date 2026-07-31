@@ -12,7 +12,9 @@ USO:
 import getpass
 import sys
 
-from cvc_trata_forms.infrastructure.credenciais.credenciais import salvar_outlook, obter_outlook, apagar_outlook
+from cvc_trata_forms.infrastructure.credenciais.credenciais import (
+    salvar_outlook, obter_outlook, apagar_outlook,
+)
 
 
 def main():
