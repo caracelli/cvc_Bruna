@@ -382,8 +382,29 @@ def _confirmar_popup_enviar(outlook, log=None, espera_s=4):
     return False
 
 
+def _linha_html(item):
+    """HTML de uma linha do bloco. 'item' e o texto puro, ou a tupla
+    (rotulo, url) - que vira rotulo + <a> de verdade na URL. Inserindo o bloco
+    pronto o OWA nao auto-linka (o auto-link so roda quando se DIGITA a URL e
+    da Enter), entao a ancora vai montada aqui."""
+    if isinstance(item, tuple):
+        rotulo, url = item
+        return (f"<div>{_escapar(rotulo)}"
+                f"<a href=\"{_escapar(url, quote=True)}\">{_escapar(url)}</a>"
+                "</div><div>&nbsp;</div>")
+    return f"<div>{_escapar(item)}</div><div>&nbsp;</div>"
+
+
+def _linha_texto(item):
+    """A mesma linha em texto puro (caminho da digitacao, onde o OWA
+    auto-linka a URL sozinho ao dar Enter)."""
+    return "".join(item) if isinstance(item, tuple) else item
+
+
 def _escrever_topo(outlook, corpo, linhas, log=None, forcar_teclado=False):
     """Poe 'linhas' no TOPO do corpo do e-mail. Devolve 'html' ou 'teclado'.
+
+    Cada item de 'linhas' e um texto ou a tupla (rotulo, url).
 
     Digitar tecla por tecla leva segundos, e nessa janela o editor do OWA se
     re-renderiza (a assinatura carrega depois do compose abrir) e come o que ja
@@ -392,8 +413,7 @@ def _escrever_topo(outlook, corpo, linhas, log=None, forcar_teclado=False):
     (execCommand insertHTML, que passa pelo pipeline de edicao do navegador,
     entao o editor do OWA enxerga). Se nao entrar, cai pra digitacao."""
     if not forcar_teclado:
-        html = "".join(f"<div>{_escapar(l)}</div><div>&nbsp;</div>"
-                       for l in linhas)
+        html = "".join(_linha_html(l) for l in linhas)
         try:
             ok = bool(corpo.evaluate(
                 """(el, html) => {
@@ -421,7 +441,7 @@ def _escrever_topo(outlook, corpo, linhas, log=None, forcar_teclado=False):
     time.sleep(0.6)          # deixa o editor assentar antes de digitar
     outlook.keyboard.press("Control+Home")
     time.sleep(0.3)
-    outlook.keyboard.type("".join(f"{l}\n \n" for l in linhas))
+    outlook.keyboard.type("".join(f"{_linha_texto(l)}\n \n" for l in linhas))
     time.sleep(0.4)
     return "teclado"
     time.sleep(0.5)
@@ -489,7 +509,7 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
     # auto-linka sozinho.
     # garante 1 espaco entre o prefixo e o numero (o config faz strip)
     pref = (prefixo.rstrip() + " ") if prefixo.strip() else ""
-    linhas = [f"{pref}{ticket}", f"{ROTULO_LINK}{link}"]
+    linhas = [f"{pref}{ticket}", (ROTULO_LINK, link)]
     if separador:
         linhas.append(separador)
     modo = _escrever_topo(outlook, corpo, linhas, log)
@@ -508,7 +528,7 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
         if not conf.get("ticket_ok"):
             faltando.append(f"{pref}{ticket}")
         if not conf.get("url_ok"):
-            faltando.append(f"{ROTULO_LINK}{link}")
+            faltando.append((ROTULO_LINK, link))
         _escrever_topo(outlook, corpo, faltando, log, forcar_teclado=True)
         conf = _conferir_corpo(corpo, ticket, link)
         log(f"   [encaminhar] apos refazer: numero={conf.get('ticket_ok')}, "
