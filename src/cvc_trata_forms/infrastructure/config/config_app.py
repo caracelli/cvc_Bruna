@@ -28,6 +28,18 @@ def _txt(caminho, default=""):
     return default
 
 
+def _txt_opcional(caminho, default=""):
+    """Como _txt, mas distingue 'tag ausente' de 'tag vazia': a tag PRESENTE e
+    vazia vale como escolha do usuario (texto vazio), nao cai no default.
+    Usado em campos que fazem sentido desligar deixando em branco."""
+    if _root is None:
+        return default
+    el = _root.find(caminho)
+    if el is None:
+        return default
+    return (el.text or "").strip()
+
+
 def _bool(caminho, default=True):
     return _txt(caminho, str(default)).strip().lower() in ("true", "1", "sim", "yes")
 
@@ -83,7 +95,10 @@ ENCAMINHAR_DESTINATARIOS = [e.strip() for e in _dest.replace(";", ",").split(","
                             if e.strip()]
 ENCAMINHAR_ASSUNTO = _txt("encaminhamento/assunto_template", "{ticket} - {assunto}")
 ENCAMINHAR_PREFIXO = _txt("encaminhamento/prefixo_corpo", "Chamado aberto: ")
-ENCAMINHAR_SEPARADOR = _txt(
+# tag PRESENTE e vazia = sem separador (o OWA ja poe o cabecalho De/Para/
+# Assunto acima do e-mail encaminhado). Por _txt cair no default, a linha
+# voltava mesmo com <separador></separador> - o oposto do que o config diz.
+ENCAMINHAR_SEPARADOR = _txt_opcional(
     "encaminhamento/separador",
     "--- Mensagem original (Microsoft Forms) abaixo ---",
 )
