@@ -224,15 +224,65 @@ def _conferir_corpo(corpo, ticket, link):
     maioria dos leitores de e-mail torna clicavel)."""
     return corpo.evaluate(
         """(el, args) => {
-            const texto = el.innerText || "";
-            const as = Array.from(el.querySelectorAll('a'));
+            // normaliza: o innerText quebra linha e o OWA mete zero-width no
+            // meio da URL ao auto-linkar -> comparar sem espacos/invisiveis
+            const limpa = (s) => (s || '')
+                .replace(/[\\u200b-\\u200d\\ufeff\\s]/g, '')
+                .replace(/\\/$/, '');
+            const texto = limpa(el.innerText);
+            const alvoT = limpa(args.ticket);
+            const alvoL = limpa(args.link);
+            const hrefs = Array.from(el.querySelectorAll('a'))
+                               .map(a => limpa(a.getAttribute('href')));
             return {
-                ticket_ok: texto.includes(args.ticket),
-                url_ok: texto.includes(args.link),
-                autolink: as.some(a => (a.getAttribute('href') || '')
-                                       .replace(/\\/$/, '') === args.link.replace(/\\/$/, '')),
+                ticket_ok: texto.includes(alvoT),
+                // vale tanto a URL no texto quanto ela no href do auto-link
+                // (o OWA as vezes encurta o texto exibido do link)
+                url_ok: texto.includes(alvoL) || hrefs.includes(alvoL),
+                autolink: hrefs.includes(alvoL),
             };
         }""", {"ticket": ticket, "link": link})
+
+
+def _compose_aberto(outlook):
+    """True enquanto a janela de escrever o e-mail estiver na tela (o campo
+    'Para' so existe no compose) - e o sinal de que o envio ainda NAO saiu."""
+    return outlook.locator(
+        "[contenteditable='true'][aria-label='Para']").count() > 0
+
+
+def _esperar_compose_fechar(outlook, timeout_s):
+    """Espera o compose sumir (= e-mail enviado). True se fechou no prazo."""
+    fim = time.time() + timeout_s
+    while time.time() < fim:
+        if not _compose_aberto(outlook):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def _enviar_compose(outlook, log, timeout_s=12):
+    """Envia o e-mail e CONFIRMA que saiu (compose fechou).
+
+    O clique no 'Enviar' pode 'dar certo' sem enviar nada - mesmo sintoma que
+    ja tinhamos no envio do chamado no Jira. Por isso o sucesso nao e o clique
+    e sim o compose fechar; se nao fechar, cai no atalho do OWA (Ctrl+Enter)."""
+    btn = outlook.get_by_role("button", name="Enviar", exact=False)
+    if btn.count() > 0:
+        try:
+            btn.first.click()
+        except Exception as e:
+            log(f"   [encaminhar] clique no 'Enviar' falhou ({e}); vou de atalho.")
+    else:
+        log("   [encaminhar] botao 'Enviar' nao encontrado; vou de atalho.")
+    _confirmar_popup_enviar(outlook)
+    if _esperar_compose_fechar(outlook, timeout_s):
+        return True
+
+    log("   [encaminhar] o clique nao enviou; tentando Ctrl+Enter (atalho do OWA).")
+    outlook.keyboard.press("Control+Enter")
+    _confirmar_popup_enviar(outlook)
+    return _esperar_compose_fechar(outlook, timeout_s)
 
 
 def _confirmar_popup_enviar(outlook):
@@ -335,21 +385,26 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
         _linha_branco()
     time.sleep(0.3)
 
+    # Conferencia do corpo: NAO barra o envio. Sem Ctrl+K nao existe mais o
+    # risco de e-mail torto (o link colado na palavra errada); um e-mail com o
+    # numero no assunto vale muito mais que e-mail nenhum. Fica o registro.
     conf = _conferir_corpo(corpo, ticket, link)
     if not conf.get("ticket_ok") or not conf.get("url_ok"):
-        log(f"   [encaminhar] corpo saiu incompleto (numero={conf.get('ticket_ok')}, "
-            f"url={conf.get('url_ok')}). Abortando o envio.")
+        log(f"   [encaminhar] conferencia do corpo: numero={conf.get('ticket_ok')}, "
+            f"url={conf.get('url_ok')}. Envio segue assim mesmo.")
         salvar_diagnostico(outlook, "encaminhar_corpo_incompleto", log)
-        raise RuntimeError(
-            f"corpo do encaminhamento incompleto: numero={conf.get('ticket_ok')}, "
-            f"url={conf.get('url_ok')}.")
-    if not conf.get("autolink"):
+    elif not conf.get("autolink"):
         # nao e erro: a URL esta la em texto puro, so nao virou <a> no compose
         log("   [encaminhar] o OWA nao auto-linkou a URL; ela vai em texto "
             "puro (continua copiavel/clicavel no leitor do destinatario).")
 
-    # Enviar (+ trata popup de anexos)
-    outlook.get_by_role("button", name="Enviar", exact=False).first.click()
-    _confirmar_popup_enviar(outlook)
-    time.sleep(3)
+    # Enviar de verdade: so vale se o compose FECHAR (clique -> Ctrl+Enter)
+    if not _enviar_compose(outlook, log):
+        log("   [encaminhar] o e-mail NAO saiu: o compose continua aberto "
+            "depois do clique e do Ctrl+Enter.")
+        salvar_diagnostico(outlook, "encaminhar_nao_enviou", log)
+        raise RuntimeError(
+            "encaminhamento nao foi enviado (compose continua aberto).")
+    log("   [encaminhar] enviado (compose fechou).")
+    time.sleep(1.5)
     return True
