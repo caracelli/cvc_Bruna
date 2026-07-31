@@ -1,6 +1,6 @@
 """
 Infra / Outlook — ACOES no e-mail (adapters que manipulam o DOM do OWA):
-extrair, categorizar, mover, marcar lido e ENCAMINHAR (com hyperlink).
+extrair, categorizar, mover, marcar lido e ENCAMINHAR (numero + URL do chamado).
 Recebem sempre a 'page' do Outlook (nao criam sessao).
 """
 
@@ -8,6 +8,9 @@ import time
 
 from cvc_trata_forms.domain.regras import limpar_titulo
 from cvc_trata_forms.infrastructure.sistema.diagnostico import salvar_diagnostico
+
+# rotulo da linha da URL do chamado no corpo do encaminhamento
+ROTULO_LINK = "Link chamado: "
 
 
 def extrair_email(outlook, indice):
@@ -212,81 +215,22 @@ def marcar_nao_lido(outlook, indice):
         "button[aria-label*='não lido' i], button[aria-label*='as unread' i]")
 
 
-def _inserir_url_no_dialogo(outlook, link):
-    """No dialogo 'Inserir link' (Ctrl+K), preenche o campo de URL (#linkInput)
-    e clica OK. O 'Exibir como' ja vem com o texto selecionado (o ticket)."""
-    time.sleep(1.2)
-    campo = outlook.locator("#linkInput")
-    if campo.count() == 0:
-        campo = outlook.locator(
-            "input[aria-label*='ndere' i], input[placeholder*='URL' i]")
-    if campo.count() > 0:
-        campo.first.fill(link)   # fill nao precisa de clique (evita backdrop)
-        time.sleep(0.3)
-    ok = outlook.get_by_role("button", name="OK", exact=True)
-    if ok.count() > 0 and ok.first.is_visible():
-        ok.first.click()
-    time.sleep(0.6)
+def _conferir_corpo(corpo, ticket, link):
+    """Confere no DOM o que ficou no topo do corpo do encaminhamento.
 
-
-def _selecionar_ticket_no_corpo(corpo, ticket):
-    """Seleciona EXATAMENTE o texto do ticket dentro do corpo, via Range do DOM.
-
-    Antes a selecao era por teclado (Control+Home + N setas p/ pular o prefixo
-    + N com Shift). Quando o Control+Home NAO levava o cursor pro inicio do
-    corpo (acontece no OWA conforme o foco/layout), as setas andavam a partir
-    do lugar errado e o link caia numa palavra qualquer do separador (ex.:
-    'riginal', de 'Mensagem original'). Aqui a posicao vem do TEXTO, nao de
-    contagem de teclas. Retorna True se achou e selecionou o ticket."""
-    return bool(corpo.evaluate(
-        """(el, alvo) => {
-            // mapeia os nos de texto do corpo com o offset acumulado, pra
-            // achar o ticket mesmo se ele estiver quebrado em varios nos
-            const nos = [];
-            const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-            let n, texto = "";
-            while ((n = w.nextNode())) {
-                nos.push([n, texto.length]);
-                texto += n.nodeValue;
-            }
-            const ini = texto.indexOf(alvo);   // 1a ocorrencia = nossa linha
-            if (ini < 0) return false;
-            const fim = ini + alvo.length;
-            let noI = null, offI = 0, noF = null, offF = 0;
-            for (const [no, base] of nos) {
-                const len = no.nodeValue.length;
-                if (noI === null && ini >= base && ini < base + len) {
-                    noI = no; offI = ini - base;
-                }
-                if (noF === null && fim > base && fim <= base + len) {
-                    noF = no; offF = fim - base;
-                }
-            }
-            if (!noI || !noF) return false;
-            const r = document.createRange();
-            r.setStart(noI, offI);
-            r.setEnd(noF, offF);
-            const s = window.getSelection();
-            s.removeAllRanges();
-            s.addRange(r);
-            return true;
-        }""", ticket))
-
-
-def _conferir_link_do_ticket(corpo, ticket, link):
-    """Confere no DOM se o hyperlink ficou no numero do chamado.
-    {ok: existe <a> cujo texto e o ticket, errado: [textos dos <a> que apontam
-    pro link do chamado mas NAO sao o ticket]} - 'errado' e o sintoma da falha
-    antiga (link na palavra do separador)."""
+    {ticket_ok: o numero do chamado esta no texto, url_ok: a URL esta no texto,
+    autolink: o OWA transformou a URL em <a> clicavel}. 'autolink' e so
+    informativo - a URL em texto puro ja resolve (da p/ copiar/colar e a
+    maioria dos leitores de e-mail torna clicavel)."""
     return corpo.evaluate(
         """(el, args) => {
+            const texto = el.innerText || "";
             const as = Array.from(el.querySelectorAll('a'));
-            const txt = (a) => (a.textContent || '').trim();
             return {
-                ok: as.some(a => txt(a) === args.ticket),
-                errado: as.filter(a => txt(a) !== args.ticket &&
-                                       (a.getAttribute('href') || '') === args.link)
-                          .map(txt).slice(0, 3),
+                ticket_ok: texto.includes(args.ticket),
+                url_ok: texto.includes(args.link),
+                autolink: as.some(a => (a.getAttribute('href') || '')
+                                       .replace(/\\/$/, '') === args.link.replace(/\\/$/, '')),
             };
         }""", {"ticket": ticket, "link": link})
 
@@ -313,14 +257,19 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
                      separador="--- Mensagem original (Microsoft Forms) abaixo ---",
                      log=print):
     """Encaminha o e-mail (indice) para 'destinatarios' com o assunto dado e,
-    no TOPO do corpo, a linha '<prefixo><ticket como HYPERLINK p/ link>' + o
-    separador. Retorna True se enviou. VALIDADO ao vivo.
+    no TOPO do corpo:
+
+        <prefixo> <ticket>
+        Link chamado: <link>
+        <separador>
+
+    Tudo em TEXTO PURO (o OWA auto-linka a URL sozinho ao dar Enter). Retorna
+    True se enviou.
 
     Compose OWA: Para=[contenteditable][aria-label='Para'];
     Assunto=input[aria-label='Assunto']; Corpo=[role='textbox'][aria-label=
-    'Corpo da mensagem']; link via Ctrl+K (Exibir como=texto sel., URL=#linkInput).
-    O 'De' sai automaticamente como a caixa compartilhada. Ao enviar pode
-    surgir o popup de anexos -> _confirmar_popup_enviar clica 'Enviar'."""
+    'Corpo da mensagem']. O 'De' sai automaticamente como a caixa compartilhada.
+    Ao enviar pode surgir o popup de anexos -> _confirmar_popup_enviar."""
     if not _abrir_menu_contexto(outlook, indice, "Encaminhar"):
         raise RuntimeError("menu 'Encaminhar' nao abriu")
     outlook.get_by_role("menuitem", name="Encaminhar", exact=False).first.click()
@@ -353,7 +302,7 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
     time.sleep(0.2)
     outlook.keyboard.type(assunto)
 
-    # Corpo: prefixo + numero do chamado como HYPERLINK, no TOPO
+    # Corpo: numero do chamado + URL do chamado, no TOPO
     corpo = outlook.locator(
         "[role='textbox'][aria-label='Corpo da mensagem']").first
     corpo.click()
@@ -370,42 +319,34 @@ def encaminhar_email(outlook, indice, destinatarios, assunto, ticket, link,
         outlook.keyboard.press("Enter")
         time.sleep(0.15)
 
+    # Duas linhas de texto puro - SEM Ctrl+K. O hyperlink no numero exigia
+    # selecionar o texto certo no editor e era exatamente ali que dava ruim
+    # (o link colava numa palavra do separador). Digitando a URL inteira nao
+    # tem o que errar: o OWA auto-linka ao dar Enter e, se nao linkar, a URL
+    # continua visivel e copiavel.
     # garante 1 espaco entre o prefixo e o numero (o config faz strip)
     pref = (prefixo.rstrip() + " ") if prefixo.strip() else ""
-    outlook.keyboard.type(pref)
-    outlook.keyboard.type(ticket)
+    outlook.keyboard.type(pref + ticket)
     _linha_branco()
+    outlook.keyboard.type(ROTULO_LINK + link)
+    _linha_branco()          # o Enter aqui e o que dispara o auto-link do OWA
     if separador:
         outlook.keyboard.type(separador)
         _linha_branco()
     time.sleep(0.3)
 
-    # transforma SO o ticket em HYPERLINK (por ultimo, pra nao depender de
-    # digitar nada apos fechar o dialogo do link). A selecao vem do TEXTO
-    # (Range no DOM) - contagem de setas errava a posicao no cliente.
-    corpo.click()          # foco no corpo (o Ctrl+K age na selecao do editor)
-    time.sleep(0.2)
-    if not _selecionar_ticket_no_corpo(corpo, ticket):
-        log(f"   [encaminhar] nao achei '{ticket}' no corpo p/ aplicar o link; "
-            "segue com o numero em texto puro.")
-        salvar_diagnostico(outlook, "encaminhar_ticket_nao_achado", log)
-    else:
-        outlook.keyboard.press("Control+k")
-        _inserir_url_no_dialogo(outlook, link)
-        time.sleep(0.4)
-        conf = _conferir_link_do_ticket(corpo, ticket, link)
-        if conf.get("errado"):
-            # link colou em outra palavra (bug 'riginal') -> NAO manda torto
-            log(f"   [encaminhar] o link caiu em {conf['errado']} em vez de "
-                f"'{ticket}'. Abortando o envio.")
-            salvar_diagnostico(outlook, "encaminhar_link_palavra_errada", log)
-            raise RuntimeError(
-                f"hyperlink aplicado no texto errado ({conf['errado']}), "
-                f"esperado '{ticket}'.")
-        if not conf.get("ok"):
-            log(f"   [encaminhar] o numero '{ticket}' ficou sem hyperlink "
-                "(dialogo do link nao aplicou); envio segue mesmo assim.")
-            salvar_diagnostico(outlook, "encaminhar_link_nao_aplicado", log)
+    conf = _conferir_corpo(corpo, ticket, link)
+    if not conf.get("ticket_ok") or not conf.get("url_ok"):
+        log(f"   [encaminhar] corpo saiu incompleto (numero={conf.get('ticket_ok')}, "
+            f"url={conf.get('url_ok')}). Abortando o envio.")
+        salvar_diagnostico(outlook, "encaminhar_corpo_incompleto", log)
+        raise RuntimeError(
+            f"corpo do encaminhamento incompleto: numero={conf.get('ticket_ok')}, "
+            f"url={conf.get('url_ok')}.")
+    if not conf.get("autolink"):
+        # nao e erro: a URL esta la em texto puro, so nao virou <a> no compose
+        log("   [encaminhar] o OWA nao auto-linkou a URL; ela vai em texto "
+            "puro (continua copiavel/clicavel no leitor do destinatario).")
 
     # Enviar (+ trata popup de anexos)
     outlook.get_by_role("button", name="Enviar", exact=False).first.click()
