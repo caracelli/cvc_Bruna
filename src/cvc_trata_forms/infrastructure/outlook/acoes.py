@@ -98,6 +98,40 @@ def aplicar_categoria(outlook, indice, codigo):
     time.sleep(1)
 
 
+def _poll_treeitem(outlook, matcher, espera_s=15):
+    """Aguarda ate 'espera_s' o 1o treeitem do dialogo de mover que satisfaz
+    matcher(texto_lower). Re-le a arvore a cada 0.5s: ela popula de forma
+    ASSINCRONA e, em sessao FRIA (login do zero / .exe), demora mais - por isso
+    um sleep fixo curto lia a arvore vazia ('pasta nao encontrada'). Retorna o
+    locator do treeitem ou None."""
+    fim = time.time() + espera_s
+    while time.time() < fim:
+        tt = outlook.locator("[role='dialog'] [role='treeitem']")
+        for i in range(tt.count()):
+            try:
+                t = (tt.nth(i).inner_text() or "").lower()
+            except Exception:
+                continue
+            if matcher(t):
+                return tt.nth(i)
+        time.sleep(0.5)
+    return None
+
+
+def _aguardar_dialogo_fechar(outlook, espera_s=15):
+    """Aguarda o dialogo de mover FECHAR (confirma que a acao concluiu), em vez
+    de um sleep fixo 'na esperanca'. Poll a cada 0.3s. Retorna True se fechou."""
+    fim = time.time() + espera_s
+    while time.time() < fim:
+        try:
+            if outlook.locator("[role='dialog']").count() == 0:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.3)
+    return False
+
+
 def mover_email(outlook, indice, pasta):
     """Move o e-mail para a subpasta 'pasta' (VALIDADO ao vivo).
     Mover -> Selecionar uma pasta diferente -> busca -> clica o .fui-TreeItemLayout."""
@@ -105,23 +139,25 @@ def mover_email(outlook, indice, pasta):
         raise RuntimeError("menu 'Mover' nao abriu")
     outlook.get_by_role("menuitem", name="Selecionar uma pasta diferente",
                         exact=False).first.click()
-    time.sleep(2)
-    outlook.fill("input[placeholder='Digite o nome da pasta ou do grupo']", pasta)
-    time.sleep(2)
-    tt = outlook.locator("[role='dialog'] [role='treeitem']")
-    alvo = None
-    for i in range(tt.count()):
-        t = (tt.nth(i).inner_text() or "").lower()
-        # a pasta destino (nao a raiz 'Gestao de Acessos')
-        if pasta.lower() in t and "gest" not in t:
-            alvo = tt.nth(i)
-            break
+    # aguarda o campo de busca do dialogo aparecer (sem sleep fixo)
+    busca = "input[placeholder='Digite o nome da pasta ou do grupo']"
+    outlook.wait_for_selector(busca, timeout=15000)
+    outlook.fill(busca, pasta)
+    # POLL: em sessao FRIA a arvore demora a popular -> aguarda o item aparecer
+    # (ate ~15s). Prefere o que NAO casa a raiz ('gest'); se so houver com
+    # 'gest' (caminho com o pai), relaxa.
+    p = pasta.lower()
+    alvo = _poll_treeitem(outlook, lambda t: p in t and "gest" not in t, 15)
     if alvo is None:
+        alvo = _poll_treeitem(outlook, lambda t: p in t, 4)
+    if alvo is None:
+        salvar_diagnostico(outlook, "mover_pasta_nao_encontrada", print)
         raise RuntimeError(f"Pasta '{pasta}' nao encontrada no dialogo de mover.")
     alvo.locator(".fui-TreeItemLayout").first.click()
-    time.sleep(0.8)
+    # o clique no botao 'Mover' ja auto-aguarda a actionability; depois
+    # aguardamos o DIALOGO FECHAR (confirma que moveu), sem sleep fixo.
     outlook.get_by_role("button", name="Mover", exact=True).first.click()
-    time.sleep(3)
+    _aguardar_dialogo_fechar(outlook)
 
 
 # pastas a EXCLUIR ao voltar pro Inbox (evita pasta pessoal/lixo/root)
@@ -146,19 +182,19 @@ def mover_para_inbox(outlook, indice, log=print):
         # pendurar 30s no default do Playwright.
         outlook.get_by_role("menuitem", name="Selecionar uma pasta diferente",
                             exact=False).first.click(timeout=8000)
-        time.sleep(2)
-        outlook.fill("input[placeholder='Digite o nome da pasta ou do grupo']",
-                     "Inbox")
-        time.sleep(2)
-        tt = outlook.locator("[role='dialog'] [role='treeitem']")
-        for i in range(tt.count()):
-            t = (tt.nth(i).inner_text() or "").lower()
-            if "inbox" in t and all(x not in t for x in _EXCL_INBOX):
-                tt.nth(i).locator(".fui-TreeItemLayout").first.click()
-                time.sleep(0.8)
-                outlook.get_by_role("button", name="Mover", exact=True).first.click()
-                time.sleep(3)
-                return True
+        busca = "input[placeholder='Digite o nome da pasta ou do grupo']"
+        outlook.wait_for_selector(busca, timeout=10000)
+        outlook.fill(busca, "Inbox")
+        # POLL (sessao fria popula a arvore devagar) pelo 'Inbox' que NAO casa
+        # nenhuma pasta pessoal/lixo/root (_EXCL_INBOX).
+        alvo = _poll_treeitem(
+            outlook,
+            lambda t: "inbox" in t and all(x not in t for x in _EXCL_INBOX), 15)
+        if alvo is not None:
+            alvo.locator(".fui-TreeItemLayout").first.click()
+            outlook.get_by_role("button", name="Mover", exact=True).first.click()
+            _aguardar_dialogo_fechar(outlook)
+            return True
         # menu abriu mas nao achamos o 'Inbox' na arvore -> diagnostica
         log("   [mover_inbox] 'Inbox' nao encontrado na arvore do dialogo.")
         salvar_diagnostico(outlook, "mover_inbox_sem_inbox_na_arvore", log)

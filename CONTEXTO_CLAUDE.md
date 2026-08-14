@@ -237,10 +237,14 @@ Em ordem de prioridade:
    único rebuild já em modo produção.
 4. **Auto-e-mail de monitoramento** — avisar por e-mail quando um ciclo falhar. O usuário quer;
    **ainda não implementado**.
-5. **Bug intermitente do `mover_para_inbox`** (`acoes.py:134`) — o menu "Mover" abre mas o item
-   "Selecionar uma pasta diferente" dá timeout, só no contexto da subpasta "Finalizados".
-   Falhou em GAAR-31/32, funcionou em 33/34. Não lança mais (retorna False) e já salva
-   diagnóstico automático — **armado para capturar na máquina do cliente**.
+5. **Instabilidade do "Mover" em sessão FRIA** (`acoes.py`) — no `.exe` (que faz login do
+   zero), a árvore do diálogo de mover popula devagar e o `sleep(2)` fixo lia a árvore vazia:
+   "Pasta 'Finalizados' não encontrada". **CORRIGIDO (2026-08-14):** `mover_email` e
+   `mover_para_inbox` agora usam `_poll_treeitem` (aguarda o item aparecer, ~15s, com fallback
+   relaxado) e `_aguardar_dialogo_fechar` no lugar dos sleeps fixos. **Validar no `.exe`**
+   (o warm/fonte não reproduz o bug). Correlato ainda em aberto: `abrir_inbox_compartilhada`
+   pode não expandir a caixa compartilhada numa sessão já-aberta e stale (mas funciona no
+   login limpo do exe).
 
 **Pendências do usuário, não dá para fazer daqui:** renomear o repo GitHub `cvc_Bruna` para o
 nome definitivo (o `gh` não está logado; depois é `git remote set-url origin <nova-url>`) e
