@@ -9,6 +9,27 @@
 
 ---
 
+## ⏸️ PONTO DE RETOMADA — segunda 2026-08-18
+
+**Onde paramos (sexta 2026-08-14):** projeto **pronto para o teste na máquina do cliente**.
+Nesta rodada foram corrigidos e validados COLD no `.exe` **3 bugs de robustez de sessão
+fria** (ver seções 5 e 6): mover em sessão fria (picker recolhido), race "Outlook não está
+logado", e o crash "Playwright Sync API inside asyncio loop". Tudo commitado/pushed
+(último `e208c05`); `ruff`/`pytest`/build OK.
+
+**Fatos-chave:** o portal Jira **É PRODUÇÃO**, IDs confirmados (1984/7550/4). Chamados de
+teste **GAAR-60..73** foram reais e ficaram **cancelados**. Token é **por-usuário**: o
+Nelson usa o dele no teste; a Bruna gera o dela. Pacote versionado `CVC-Trata-Forms.zip` é
+**per-user** (token/senha vazios) = seguro pra Bruna. Cópia pronta-pra-rodar do Nelson
+(com creds dele, DRY-RUN) em `Desktop\CVC-Trata-Forms-NELSON-teste.zip` (fora do git).
+
+**PRÓXIMO PASSO:** rodar **na máquina do cliente** na ordem **DRY-RUN → DEMO → 1 e-mail
+REAL** (valida rede/Edge/acesso do ambiente). Passando, enviar o **zip limpo do repo +
+`GUIA_TESTE_CLIENTE.md`** pra Bruna. Único ponto não estressado ao vivo: processar
+**vários** e-mails numa passada (laço sobre a operação de 1 e-mail, já validada).
+
+---
+
 ## 1. O que é o projeto
 
 Automação para o usuário **Nelson** (conta corporativa CVC) e a usuária final **Bruna**.
