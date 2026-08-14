@@ -40,11 +40,12 @@ O token é **por usuário** — não é compartilhado.
 Trocar de modo pelo formulário (menu do ícone na bandeja → *Configurações*).
 Menu → **Ver log** mostra o que aconteceu em cada ciclo.
 
-## 5. IDs do portal (confirmar para o destino da Bruna)
-Embutidos no pacote (fila **GAAR — Argentina**):
+## 5. IDs do portal — CONFIRMADOS (produção)
+Embutidos no pacote (fila **GAAR — Argentina**, mesma já usada em produção):
 - `service_desk_id = 1984`  ·  `request_type_id = 7550`  ·  `transicao_cancelar_id = 4`
 
-Se a Bruna abrir chamado em **outra fila**, esses 3 valores mudam (ajustar no config).
+> Os chamados de teste **GAAR‑60..73** foram criados de verdade neste portal e
+> ficaram **Cancelados pelo Solicitante** (o portal do cliente não permite excluir).
 
 ## 6. Checklist pré‑envio (segunda de manhã)
 - [ ] Token Jira do operador gerado (passo 2).
@@ -55,8 +56,12 @@ Se a Bruna abrir chamado em **outra fila**, esses 3 valores mudam (ajustar no co
 - [ ] Decidido quando ligar o modo **REAL**.
 
 ## 7. Observações
-- **Modo REAL ainda não foi validado ao vivo** (só DRY‑RUN e DEMO). Recomenda‑se
-  rodar **1 e‑mail real** em produção e conferir antes de deixar automático.
+- **Modo REAL:** faz exatamente `criar chamado → encaminhar → mover p/ Finalizados`
+  — as MESMAS operações já validadas no DEMO/produção (GAAR‑60..73); a única diferença
+  é que **não desfaz** (não cancela o chamado nem volta o e‑mail). Ou seja, o REAL é o
+  DEMO **sem o passo de desfazer**. Ainda assim, vale rodar **1 e‑mail real** e conferir
+  antes de deixar automático. Ponto não estressado: processar **vários** e‑mails numa
+  passada (é um laço sobre a operação de 1 e‑mail, que está validada).
 - O app faz **login do zero a cada abertura** (logoff + login + MFA) — é por design
   ("nunca deixar conectado").
 - Config com senha/token fica **só na máquina local** (`dados/config.xml`) — não
