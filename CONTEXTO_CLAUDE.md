@@ -247,8 +247,12 @@ Em ordem de prioridade:
    filtra o que já está carregado; a subpasta da caixa compartilhada não carregava.
    **FIX:** `_revelar_pastas_dialogo` (limpa busca, expande nós do diálogo, clica "Carregar
    mais pastas") + RE-FILTRA "Finalizados" (mostra só o LEAF) + TRAVA que confere o rótulo
-   do alvo antes de clicar (nunca move pra pasta errada). **VALIDADO warm (GAAR-64/66):** move p/
-   Finalizados + volta OK. Correlato **CORRIGIDO+VALIDADO:** `abrir_inbox_compartilhada`
+   do alvo antes de clicar (nunca move pra pasta errada). **VALIDADO COLD no .exe (GAAR-67):**
+   login do zero -> move p/ Finalizados -> cancela -> restaura, "Caixa e Jira de volta ao
+   estado original". Tambem corrigido `_garantir_sessoes` (processar_acessos): re-checa ~25s
+   o OWA (assincrono) em vez de leitura unica racy que dava "Outlook nao esta logado" logo
+   apos o login. **VALIDADO warm (GAAR-64/66):** move p/ Finalizados + volta OK. Correlato
+   **CORRIGIDO+VALIDADO:** `abrir_inbox_compartilhada`
    não abria a caixa compartilhada quando ela vinha RECOLHIDA (``) numa sessão fria —
    agora `_expandir_caixa` (expande o cabeçalho da caixa) + `_carregar_mais_pastas` (clica
    "Carregar mais pastas") + poll ~40s; testado no exato estado que falhava (abriu a Inbox
