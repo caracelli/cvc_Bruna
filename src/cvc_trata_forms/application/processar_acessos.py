@@ -58,6 +58,14 @@ except Exception:
 def _garantir_sessoes():
     est = checar()
     browser = est["browser"]
+    # O OWA renderiza a arvore/navegacao de forma ASSINCRONA apos o login; a 1a
+    # leitura (logo apos "Login concluido") pode ler "nao logado" numa sessao
+    # FRIA. Nao declarar falha de cara - re-checa por ~25s REUSANDO o browser
+    # (sem abrir nova sessao Playwright) ate o Outlook responder.
+    fim = time.time() + 25
+    while not est["outlook"].get("ok") and time.time() < fim:
+        time.sleep(1.5)
+        est = checar(browser)
     outlook = est["page_outlook"]
     jira = est["page_jira"]
     if not est["outlook"].get("ok"):
