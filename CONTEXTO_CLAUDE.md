@@ -242,9 +242,12 @@ Em ordem de prioridade:
    "Pasta 'Finalizados' não encontrada". **CORRIGIDO (2026-08-14):** `mover_email` e
    `mover_para_inbox` agora usam `_poll_treeitem` (aguarda o item aparecer, ~15s, com fallback
    relaxado) e `_aguardar_dialogo_fechar` no lugar dos sleeps fixos. **Validar no `.exe`**
-   (o warm/fonte não reproduz o bug). Correlato ainda em aberto: `abrir_inbox_compartilhada`
-   pode não expandir a caixa compartilhada numa sessão já-aberta e stale (mas funciona no
-   login limpo do exe).
+   (o warm/fonte não reproduz o bug). **VALIDADO ao vivo (DEMO GAAR-64):** move p/
+   Finalizados + volta OK. Correlato **CORRIGIDO+VALIDADO:** `abrir_inbox_compartilhada`
+   não abria a caixa compartilhada quando ela vinha RECOLHIDA (``) numa sessão fria —
+   agora `_expandir_caixa` (expande o cabeçalho da caixa) + `_carregar_mais_pastas` (clica
+   "Carregar mais pastas") + poll ~40s; testado no exato estado que falhava (abriu a Inbox
+   e revelou Finalizados). Mesmo padrão em `abrir_subpasta`.
 
 **Pendências do usuário, não dá para fazer daqui:** renomear o repo GitHub `cvc_Bruna` para o
 nome definitivo (o `gh` não está logado; depois é `git remote set-url origin <nova-url>`) e

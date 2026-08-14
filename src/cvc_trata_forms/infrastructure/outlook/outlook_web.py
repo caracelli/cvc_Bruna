@@ -129,9 +129,14 @@ def abrir_inbox_compartilhada(page, nome_caixa, timeout_ms=8000):
     """
     alvo = nome_caixa.lower()
     inbox_termos = ("inbox", "caixa de entrada", "entrada")
-    fim = time.time() + 25
+    # Em sessao FRIA (login do zero / .exe) a caixa COMPARTILHADA vem RECOLHIDA
+    # e suas subpastas so carregam depois de expandir o cabecalho (e, as vezes,
+    # de clicar 'Carregar mais pastas'). Poll ~40s re-expandindo a cada volta.
+    fim = time.time() + 40
     while time.time() < fim:
-        _expandir_colapsados(page)
+        _carregar_mais_pastas(page)     # revela subpastas atras de 'Carregar mais'
+        _expandir_caixa(page, alvo)     # expande o cabecalho da caixa compartilhada
+        _expandir_colapsados(page)      # rede de seguranca p/ outros nos colapsados
         tree, labels = _arvore_labels(page)
         idx_hdr = next((i for i, lbl in labels if alvo in lbl.lower()), None)
         if idx_hdr is not None:
@@ -141,7 +146,7 @@ def abrir_inbox_compartilhada(page, nome_caixa, timeout_ms=8000):
                     tree.nth(i).click()
                     _esperar_lista(page, timeout_ms)
                     return lbl
-        time.sleep(1.5)
+        time.sleep(1.0)
     raise RuntimeError(
         f"Nao achei a Caixa de Entrada da caixa '{nome_caixa}'. "
         f"Pastas: {listar_pastas(page)}"
@@ -154,8 +159,10 @@ def abrir_subpasta(page, nome_caixa, subpasta, timeout_ms=8000):
     pessoais de mesmo nome). Retorna o rotulo aberto."""
     alvo = nome_caixa.lower()
     sub = subpasta.lower()
-    fim = time.time() + 25
+    fim = time.time() + 40
     while time.time() < fim:
+        _carregar_mais_pastas(page)
+        _expandir_caixa(page, alvo)
         _expandir_colapsados(page)
         tree, labels = _arvore_labels(page)
         idx_hdr = next((i for i, lbl in labels if alvo in lbl.lower()), None)
@@ -170,6 +177,65 @@ def abrir_subpasta(page, nome_caixa, subpasta, timeout_ms=8000):
         f"Nao achei a subpasta '{subpasta}' da caixa '{nome_caixa}'. "
         f"Pastas: {listar_pastas(page)}"
     )
+
+
+def _carregar_mais_pastas(page):
+    """Clica nos 'Carregar mais pastas' / 'Load more folders' da arvore, que
+    escondem subpastas (a Caixa de Entrada da caixa compartilhada pode estar
+    atras deste no numa sessao fria). Best-effort; nao lanca."""
+    clicou = False
+    try:
+        alvos = page.locator(
+            "[role='treeitem'][aria-label*='arregar mais' i], "
+            "[role='treeitem'][aria-label*='oad more' i], "
+            "div[role='treeitem']:has-text('Carregar mais'), "
+            "div[role='treeitem']:has-text('Load more')"
+        )
+        for i in range(alvos.count()):
+            no = alvos.nth(i)
+            try:
+                if no.is_visible():
+                    no.click()
+                    clicou = True
+                    time.sleep(0.8)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return clicou
+
+
+def _expandir_caixa(page, alvo):
+    """Garante que o CABECALHO da caixa compartilhada cujo rotulo contem 'alvo'
+    esteja EXPANDIDO, revelando as subpastas (Caixa de Entrada / Finalizados).
+
+    Em sessao fria o no vem recolhido e o expandir generico (foco+seta) nem
+    sempre pega esse no especifico. Aqui miramos ele: foco + seta-direita e,
+    se ainda recolhido, clicamos no no (nao troca a lista) e repetimos.
+    Best-effort; nao lanca. Retorna True se conseguiu expandir."""
+    tree = page.locator("div[role='treeitem']")
+    for i in range(tree.count()):
+        try:
+            no = tree.nth(i)
+            lbl = (no.get_attribute("aria-label") or no.inner_text() or "").lower()
+            if alvo not in lbl:
+                continue
+            if no.get_attribute("aria-expanded") == "true":
+                return True
+            no.scroll_into_view_if_needed()
+            no.focus()
+            page.keyboard.press("ArrowRight")
+            time.sleep(0.6)
+            if no.get_attribute("aria-expanded") != "true":
+                # fallback: seleciona o no (clicar no cabecalho nao muda a lista)
+                no.click()
+                time.sleep(0.4)
+                page.keyboard.press("ArrowRight")
+                time.sleep(0.6)
+            return no.get_attribute("aria-expanded") == "true"
+        except Exception:
+            continue
+    return False
 
 
 def _expandir_colapsados(page):
