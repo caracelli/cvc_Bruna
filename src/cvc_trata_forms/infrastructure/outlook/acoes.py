@@ -132,6 +132,58 @@ def _aguardar_dialogo_fechar(outlook, espera_s=15):
     return False
 
 
+def _revelar_pastas_dialogo(outlook):
+    """Sessao FRIA: o picker de 'Mover' mostra os nós-raiz (as CAIXAS) RECOLHIDOS
+    (aria-expanded='false') e a subpasta-alvo da caixa COMPARTILHADA ainda nao
+    carregou (fica atras de 'Carregar mais pastas'). Digitar no filtro so acha o
+    que JA esta carregado -> nao encontra a subpasta. Aqui LIMPAMOS a busca,
+    EXPANDIMOS os nós recolhidos do dialogo (foco+seta, SEM clicar/selecionar a
+    raiz) e clicamos 'Carregar mais pastas' DENTRO do dialogo, revelando as
+    subpastas. Best-effort; nao lanca."""
+    try:
+        cx = outlook.locator("[role='dialog'] input").first
+        if cx.count() > 0:
+            cx.fill("")
+            time.sleep(0.5)
+    except Exception:
+        pass
+    for _ in range(4):
+        mexeu = False
+        # 'Carregar mais pastas' / 'Load more' DENTRO do dialogo
+        try:
+            mais = outlook.locator(
+                "[role='dialog'] [role='treeitem']:has-text('Carregar mais'), "
+                "[role='dialog'] [role='treeitem']:has-text('Load more')")
+            for i in range(mais.count()):
+                try:
+                    if mais.nth(i).is_visible():
+                        mais.nth(i).click()
+                        mexeu = True
+                        time.sleep(0.8)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        # expande nós recolhidos (raiz das caixas -> revela as subpastas)
+        try:
+            tt = outlook.locator(
+                "[role='dialog'] [role='treeitem'][aria-expanded='false']")
+            for i in range(tt.count()):
+                try:
+                    no = tt.nth(i)
+                    no.scroll_into_view_if_needed()
+                    no.focus()
+                    outlook.keyboard.press("ArrowRight")
+                    time.sleep(0.4)
+                    mexeu = True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        if not mexeu:
+            break
+
+
 def mover_email(outlook, indice, pasta):
     """Move o e-mail para a subpasta 'pasta' (VALIDADO ao vivo).
     Mover -> Selecionar uma pasta diferente -> busca -> clica o .fui-TreeItemLayout."""
@@ -142,18 +194,35 @@ def mover_email(outlook, indice, pasta):
     # aguarda o campo de busca do dialogo aparecer (sem sleep fixo)
     busca = "input[placeholder='Digite o nome da pasta ou do grupo']"
     outlook.wait_for_selector(busca, timeout=15000)
-    outlook.fill(busca, pasta)
-    # POLL: em sessao FRIA a arvore demora a popular -> aguarda o item aparecer
-    # (ate ~15s). Prefere o que NAO casa a raiz ('gest'); se so houver com
-    # 'gest' (caminho com o pai), relaxa.
     p = pasta.lower()
-    alvo = _poll_treeitem(outlook, lambda t: p in t and "gest" not in t, 15)
+    # 1) caminho rapido (sessao morna): digita e o picker FILTRA a subpasta.
+    #    O filtro deixa so o LEAF que casa -> _poll pega a pasta certa.
+    outlook.fill(busca, pasta)
+    alvo = _poll_treeitem(outlook, lambda t: p in t and "gest" not in t, 6)
+    # 2) sessao FRIA: o filtro so acha pastas JA carregadas e a subpasta da
+    #    caixa compartilhada nao carregou (nós-raiz recolhidos + 'Carregar mais
+    #    pastas'). REVELA (expande + carrega) e RE-DIGITA o filtro (assim a
+    #    arvore volta a mostrar so o LEAF - senao casaria um nó-PAI que contem
+    #    'Finalizados' aninhado e moveria pra pasta errada).
     if alvo is None:
-        alvo = _poll_treeitem(outlook, lambda t: p in t, 4)
+        _revelar_pastas_dialogo(outlook)
+        outlook.fill(busca, pasta)
+        alvo = _poll_treeitem(outlook, lambda t: p in t and "gest" not in t, 20)
     if alvo is None:
         salvar_diagnostico(outlook, "mover_pasta_nao_encontrada", print)
         raise RuntimeError(f"Pasta '{pasta}' nao encontrada no dialogo de mover.")
-    alvo.locator(".fui-TreeItemLayout").first.click()
+    lay = alvo.locator(".fui-TreeItemLayout").first
+    # TRAVA DE SEGURANCA: confirma que o item a clicar E a pasta-alvo (o rotulo
+    # PROPRIO do nó) e nao um nó-PAI que apenas CONTEM a subpasta aninhada -
+    # senao moveria pra pasta errada. O rotulo comeca com o nome da pasta
+    # (icones/contadores viram nao-alnum e sao descartados).
+    rot = "".join(c for c in (lay.inner_text() or "").lower()
+                  if c.isalnum() or c == " ").strip()
+    if not rot.startswith(p):
+        salvar_diagnostico(outlook, "mover_alvo_nao_confere", print)
+        raise RuntimeError(
+            f"Alvo do mover nao confere com '{pasta}' (rotulo: '{rot[:40]}').")
+    lay.click()
     # o clique no botao 'Mover' ja auto-aguarda a actionability; depois
     # aguardamos o DIALOGO FECHAR (confirma que moveu), sem sleep fixo.
     outlook.get_by_role("button", name="Mover", exact=True).first.click()
@@ -185,16 +254,34 @@ def mover_para_inbox(outlook, indice, log=print):
         busca = "input[placeholder='Digite o nome da pasta ou do grupo']"
         outlook.wait_for_selector(busca, timeout=10000)
         outlook.fill(busca, "Inbox")
-        # POLL (sessao fria popula a arvore devagar) pelo 'Inbox' que NAO casa
-        # nenhuma pasta pessoal/lixo/root (_EXCL_INBOX).
-        alvo = _poll_treeitem(
-            outlook,
-            lambda t: "inbox" in t and all(x not in t for x in _EXCL_INBOX), 15)
+        # POLL pelo 'Inbox' que NAO casa nenhuma pasta pessoal/lixo/root
+        # (_EXCL_INBOX). Caminho rapido (sessao morna) e, se falhar, expande o
+        # dialogo (sessao FRIA: nós-raiz recolhidos) e procura de novo.
+        def _casa_inbox(t):
+            return "inbox" in t and all(x not in t for x in _EXCL_INBOX)
+        alvo = _poll_treeitem(outlook, _casa_inbox, 6)
+        if alvo is None:
+            _revelar_pastas_dialogo(outlook)
+            outlook.fill(busca, "Inbox")   # re-filtra p/ mostrar so o LEAF
+            alvo = _poll_treeitem(outlook, _casa_inbox, 20)
         if alvo is not None:
-            alvo.locator(".fui-TreeItemLayout").first.click()
-            outlook.get_by_role("button", name="Mover", exact=True).first.click()
-            _aguardar_dialogo_fechar(outlook)
-            return True
+            lay = alvo.locator(".fui-TreeItemLayout").first
+            # trava: o rotulo PROPRIO tem de casar 'inbox' (e nao ser um nó-pai
+            # que so contem 'Inbox' aninhado) -> nao volta pra pasta errada.
+            rot = "".join(c for c in (lay.inner_text() or "").lower()
+                          if c.isalnum() or c == " ").strip()
+            if "inbox" in rot and all(x not in rot for x in _EXCL_INBOX):
+                lay.click()
+                outlook.get_by_role("button", name="Mover", exact=True).first.click()
+                _aguardar_dialogo_fechar(outlook)
+                return True
+            log(f"   [mover_inbox] alvo nao confere (rotulo: '{rot[:40]}').")
+            salvar_diagnostico(outlook, "mover_inbox_alvo_nao_confere", log)
+            try:
+                outlook.keyboard.press("Escape")
+            except Exception:
+                pass
+            return False
         # menu abriu mas nao achamos o 'Inbox' na arvore -> diagnostica
         log("   [mover_inbox] 'Inbox' nao encontrado na arvore do dialogo.")
         salvar_diagnostico(outlook, "mover_inbox_sem_inbox_na_arvore", log)

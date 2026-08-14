@@ -242,7 +242,12 @@ Em ordem de prioridade:
    "Pasta 'Finalizados' não encontrada". **CORRIGIDO (2026-08-14):** `mover_email` e
    `mover_para_inbox` agora usam `_poll_treeitem` (aguarda o item aparecer, ~15s, com fallback
    relaxado) e `_aguardar_dialogo_fechar` no lugar dos sleeps fixos. **Validar no `.exe`**
-   (o warm/fonte não reproduz o bug). **VALIDADO ao vivo (DEMO GAAR-64):** move p/
+   (o warm/fonte não reproduz o bug). **CAUSA-RAIZ (exe GAAR-65):** o picker de "Mover"
+   tem estado PRÓPRIO — os 2 nós-raiz (caixas) vêm RECOLHIDOS e digitar "Finalizados" só
+   filtra o que já está carregado; a subpasta da caixa compartilhada não carregava.
+   **FIX:** `_revelar_pastas_dialogo` (limpa busca, expande nós do diálogo, clica "Carregar
+   mais pastas") + RE-FILTRA "Finalizados" (mostra só o LEAF) + TRAVA que confere o rótulo
+   do alvo antes de clicar (nunca move pra pasta errada). **VALIDADO warm (GAAR-64/66):** move p/
    Finalizados + volta OK. Correlato **CORRIGIDO+VALIDADO:** `abrir_inbox_compartilhada`
    não abria a caixa compartilhada quando ela vinha RECOLHIDA (``) numa sessão fria —
    agora `_expandir_caixa` (expande o cabeçalho da caixa) + `_carregar_mais_pastas` (clica
