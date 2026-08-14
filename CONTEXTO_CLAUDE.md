@@ -258,6 +258,15 @@ Em ordem de prioridade:
    "Carregar mais pastas") + poll ~40s; testado no exato estado que falhava (abriu a Inbox
    e revelou Finalizados). Mesmo padrão em `abrir_subpasta`.
 
+6. **Crash intermitente `Playwright Sync API inside the asyncio loop`** (`bandeja.py`) —
+   só no `.exe` (app de bandeja em thread). Quando um ciclo falhava no meio, o event loop
+   greenlet da API sync do Playwright não era desmontado por completo e poluía a thread; a
+   próxima `sync_playwright().start()` na MESMA thread quebrava (visto na recuperação/re-login).
+   **CORRIGIDO (2026-08-14):** helper `_isolado(fn)` roda cada operação Playwright
+   (`fazer_login`/`ciclo`) numa THREAD NOVA e descartável — quando ela termina, qualquer loop
+   asyncio remanescente morre junto e a próxima começa limpa. **VALIDADO COLD:** 3 ciclos
+   seguidos no `.exe` sem o crash. Este era o último risco de robustez da sessão fria.
+
 **Pendências do usuário, não dá para fazer daqui:** renomear o repo GitHub `cvc_Bruna` para o
 nome definitivo (o `gh` não está logado; depois é `git remote set-url origin <nova-url>`) e
 renomear a pasta do projeto no disco (exige VS Code fechado + recriar o `.venv` com
