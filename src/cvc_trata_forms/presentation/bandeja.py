@@ -224,6 +224,33 @@ def ciclo():
     return ok
 
 
+def _isolado(fn):
+    """Roda fn() numa THREAD NOVA e descartavel e espera terminar.
+
+    Cada operacao do Playwright (login/ciclo) fica isolada: a API sync do
+    Playwright roda um event loop asyncio (greenlet) preso a thread; se um
+    ciclo falha no meio, esse loop pode nao ser desmontado por completo e
+    POLUI a thread -> a proxima 'sync_playwright().start()' na MESMA thread
+    quebra com 'Playwright Sync API inside the asyncio loop'. Rodando cada
+    operacao numa thread propria, quando ela termina qualquer loop remanescente
+    morre junto e a proxima operacao comeca com asyncio limpo. Repassa o
+    retorno (e re-lanca excecao, se houver)."""
+    res = {}
+
+    def _alvo():
+        try:
+            res["v"] = fn()
+        except Exception as e:  # noqa: BLE001
+            res["e"] = e
+
+    t = threading.Thread(target=_alvo, daemon=True)
+    t.start()
+    t.join()
+    if "e" in res:
+        raise res["e"]
+    return res.get("v")
+
+
 def loop_monitor():
     # Login SEMPRE do zero ao iniciar: limpa qualquer sessao anterior (mesmo
     # que o app anterior tenha sido morto/travado sem logoff). Regra
@@ -236,10 +263,10 @@ def loop_monitor():
     except Exception as e:  # noqa: BLE001
         log(f"(limpeza inicial: {e})")
 
-    fazer_login()
+    _isolado(fazer_login)
     while not parar.is_set():
         if not pausado.is_set():
-            ok = ciclo()
+            ok = _isolado(ciclo)
             if not ok and not parar.is_set():
                 # Edge fechou / sessao caiu -> reabre o Edge e re-loga sozinho.
                 # NAO re-roda o ciclo imediatamente: espera o intervalo (ou um
@@ -258,7 +285,7 @@ def loop_monitor():
                                      "CVC-Trata-Forms")
                     except Exception:
                         pass
-                fazer_login()
+                _isolado(fazer_login)
         # espera o intervalo OU um disparo manual ("Verificar agora")
         disparar.wait(timeout=INTERVALO_S)
         disparar.clear()
