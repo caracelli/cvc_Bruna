@@ -67,6 +67,22 @@ JIRA_PREFIXO_CHAMADO = _txt("jira/prefixo_chamado", "")
 # base do portal (…/portal/1984/) derivada da URL de criacao, p/ abrir o chamado
 JIRA_PORTAL_BASE = URL_JIRA.split("/group/")[0].rstrip("/") + "/"
 
+# ---- Jira via API (REST) ----
+# Se houver usuario + token, o app cria/cancela o chamado pela JSM REST API
+# (sem abrir a aba do Jira nem login SSO). Sem token, cai no fluxo de navegador.
+JIRA_API_USUARIO = _txt("jira/usuario")
+JIRA_API_TOKEN = _txt("jira/token")
+# site Atlassian (scheme+host) derivado da URL do chamado
+JIRA_SITE = ("/".join(URL_JIRA.split("/")[:3]) if "://" in URL_JIRA
+             else "https://cvccorp.atlassian.net")
+# IDs do portal (estaveis; apurados na API). Default = portal do Bruna (GAAR).
+JIRA_SERVICE_DESK_ID = _txt("jira/service_desk_id", "1984")
+JIRA_REQUEST_TYPE_ID = _txt("jira/request_type_id", "7550")
+# id da transicao de cancelamento do solicitante (4 = "Cancelado pelo Solicitante")
+JIRA_TRANSICAO_CANCELAR_ID = _txt("jira/transicao_cancelar_id", "4")
+# liga a API so quando ha credencial (usuario + token)
+JIRA_API_ATIVA = bool(JIRA_API_USUARIO and JIRA_API_TOKEN)
+
 # ---- Fluxo ----
 REMETENTE_FILTRO = _txt("fluxo/remetente_filtro", "Microsoft Forms")
 SUBPASTA_DESTINO = _txt("fluxo/subpasta_destino", "Finalizados")

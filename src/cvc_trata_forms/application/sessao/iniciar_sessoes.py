@@ -43,7 +43,9 @@ except Exception:
 # Caminhos PORTAVEIS (detecta Edge + perfil isolado em %LOCALAPPDATA%)
 from cvc_trata_forms.infrastructure.sistema.caminhos import EDGE, PERFIL, PORTA, achar_edge
 # URLs vem do config.xml (configuravel por cliente)
-from cvc_trata_forms.infrastructure.config.config_app import URL_OUTLOOK, URL_JIRA, INVISIVEL
+from cvc_trata_forms.infrastructure.config.config_app import (
+    URL_OUTLOOK, URL_JIRA, INVISIVEL, JIRA_API_ATIVA,
+)
 
 # sinais positivos de sessao ativa (por portal)
 POS_OUTLOOK = ["div[role='treeitem']", "div[role='option']",
@@ -490,6 +492,21 @@ def _main_impl():
         print("\n>> Outlook nao logou. O Jira NAO sera aberto. "
               "Faca o login e rode de novo.")
         print("=" * 70)
+        return
+
+    # Com a API do Jira ativa (usuario + token no config), NAO abrimos a aba
+    # nem fazemos login SSO no Jira -- o chamado e criado/cancelado via REST.
+    if JIRA_API_ATIVA:
+        if popup_proc is not None:
+            try:
+                popup_proc.terminate()
+            except Exception:
+                pass
+        print("\n" + "=" * 70)
+        print("  PRONTO! Outlook logado. Jira sera via API (sem aba/login).")
+        print("=" * 70)
+        if INVISIVEL:
+            esconder_edge()
         return
 
     # ---- PASSO 2: JIRA (so agora, com o Outlook ja logado) -----------------

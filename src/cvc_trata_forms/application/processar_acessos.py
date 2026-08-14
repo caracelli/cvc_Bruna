@@ -37,10 +37,11 @@ from cvc_trata_forms.infrastructure.outlook.acoes import (
 from cvc_trata_forms.infrastructure.jira.chamado import (
     preencher_formulario, enviar_e_capturar_codigo, cancelar_chamado,
 )
+from cvc_trata_forms.infrastructure.jira import chamado_api
 from cvc_trata_forms.infrastructure.config.config_app import (
     DRY_RUN, DEMO, DEMO_QTD, CAIXA, REMETENTE_FILTRO, SO_NAO_LIDOS,
     SUBPASTA_DESTINO, MARCAR_COMO_LIDO, ENCERRAR_SESSOES_NO_FIM, URL_JIRA,
-    JIRA_CAT_PREFIXO, JIRA_PORTAL_BASE, JIRA_TRANSICAO_CANCELAR,
+    JIRA_CAT_PREFIXO, JIRA_PORTAL_BASE, JIRA_TRANSICAO_CANCELAR, JIRA_API_ATIVA,
     ENCAMINHAR_ATIVO, ENCAMINHAR_DESTINATARIOS, ENCAMINHAR_ASSUNTO,
     ENCAMINHAR_PREFIXO, ENCAMINHAR_SEPARADOR,
 )
@@ -63,7 +64,8 @@ def _garantir_sessoes():
         raise RuntimeError(
             "Outlook nao esta logado. Rode o bootstrap de sessoes antes."
         )
-    if not est["jira"].get("ok"):
+    # Com a API do Jira ativa, NAO precisamos da aba/login do Jira.
+    if not JIRA_API_ATIVA and not est["jira"].get("ok"):
         print("   Jira pediu re-login (SSO) - resolvendo...")
         email, senha = obter_outlook()
         if jira is None:
@@ -110,6 +112,30 @@ def _focar(page):
         pass
 
 
+def _criar_chamado(jira, dados):
+    """Cria o chamado e retorna (codigo, link). Usa a API do Jira quando
+    configurada (JIRA_API_ATIVA) — sem abrir a aba/formulario — ou cai no
+    fluxo de navegador. Retorna ('??-?', '') em caso de falha."""
+    if JIRA_API_ATIVA:
+        return chamado_api.criar_chamado(dados)
+    # --- fallback: formulario no navegador ---
+    _focar(jira)
+    jira.goto(URL_JIRA, wait_until="domcontentloaded")
+    time.sleep(2)
+    if not preencher_formulario(jira, dados):
+        return "??-?", ""
+    return enviar_e_capturar_codigo(jira)
+
+
+def _cancelar_chamado(jira, codigo):
+    """Cancela o chamado (usado no DEMO). Via API quando ativa, senao navegador."""
+    if JIRA_API_ATIVA:
+        return chamado_api.cancelar_chamado(codigo)
+    _focar(jira)
+    return cancelar_chamado(jira, codigo, JIRA_PORTAL_BASE,
+                            JIRA_TRANSICAO_CANCELAR, log=print)
+
+
 def processar_demo(outlook, jira):
     """MODO DEMO (self-cleaning): processa ate DEMO_QTD e-mails de VERDADE
     (cria chamado + encaminha + marca lido + move) e DEPOIS DESFAZ (cancela o
@@ -135,17 +161,10 @@ def processar_demo(outlook, jira):
             _focar(outlook)          # mostra o Outlook enquanto le o e-mail
             dados = extrair_email(outlook, e["indice"])
             print(f"\n>> [DEMO] criando chamado p/: {dados['titulo']}")
-            _focar(jira)             # mostra o Jira enquanto cria o chamado
-            jira.goto(URL_JIRA, wait_until="domcontentloaded")   # form de criacao
-            time.sleep(2)
-            if not preencher_formulario(jira, dados):
-                print("   [DEMO] formulario nao preencheu; parando FASE 1.")
-                break
-            codigo, link = enviar_e_capturar_codigo(jira)
+            codigo, link = _criar_chamado(jira, dados)
             if codigo == "??-?":
-                print("   [DEMO][ERRO] envio do chamado falhou (codigo '??-?'); "
-                      "parando FASE 1 p/ nao encaminhar com link/numero errado. "
-                      "Veja o diagnostico [enviar]/[form] acima no log.")
+                print("   [DEMO][ERRO] criacao do chamado falhou (codigo '??-?'); "
+                      "parando FASE 1 p/ nao encaminhar com link/numero errado.")
                 break
             print(f"   [DEMO] chamado criado: {codigo}  ({link})")
             _focar(outlook)          # volta ao Outlook p/ encaminhar/mover
@@ -168,10 +187,8 @@ def processar_demo(outlook, jira):
     # ---- FASE 2: DESFAZ (cancela chamado + volta e-mail nao lido) ----
     if feitos:
         print(">> [DEMO] FASE 2: cancelando chamados e voltando os e-mails...")
-        _focar(jira)                 # mostra o Jira enquanto cancela
         for _id, _res, codigo in feitos:
-            cancelar_chamado(jira, codigo, JIRA_PORTAL_BASE,
-                             JIRA_TRANSICAO_CANCELAR, log=print)
+            _cancelar_chamado(jira, codigo)
         _focar(outlook)              # volta ao Outlook p/ restaurar o e-mail
         abrir_subpasta(outlook, CAIXA, SUBPASTA_DESTINO)
         _aguardar_lista(outlook)
@@ -253,16 +270,10 @@ def processar(outlook, jira):
             _focar(outlook)          # mostra o Outlook enquanto le o e-mail
             dados = extrair_email(outlook, e["indice"])
             print(f"\n>> Processando: {dados['titulo']}")
-            _focar(jira)             # mostra o Jira enquanto cria o chamado
-            if not preencher_formulario(jira, dados):
-                print("   [ERRO] nao preencheu o formulario; parando.")
-                break
-            codigo, link = enviar_e_capturar_codigo(jira)
+            codigo, link = _criar_chamado(jira, dados)
             if codigo == "??-?":
-                print("   [ERRO] nao consegui capturar o numero do chamado "
-                      "(envio falhou). Abortando este ciclo p/ NAO encaminhar "
-                      "com numero/link errado. Veja o diagnostico [enviar]/"
-                      "[form] acima no log.")
+                print("   [ERRO] nao consegui criar o chamado. Abortando este "
+                      "ciclo p/ NAO encaminhar com numero/link errado.")
                 break
             print(f"   Chamado criado: {codigo}  ({link})")
             _focar(outlook)          # volta ao Outlook p/ encaminhar/mover
@@ -280,8 +291,9 @@ def processar(outlook, jira):
                 marcar_lido(outlook, e["indice"])
             mover_email(outlook, e["indice"], SUBPASTA_DESTINO)
             processados += 1
-            jira.goto(URL_JIRA, wait_until="domcontentloaded")
-            time.sleep(2)
+            if not JIRA_API_ATIVA and jira is not None:
+                jira.goto(URL_JIRA, wait_until="domcontentloaded")
+                time.sleep(2)
 
         print(f"\n>> {processados} e-mail(s) processado(s).")
         return encontrados, processados
@@ -297,7 +309,10 @@ def main():
 
     print(">> Verificando sessoes...")
     browser, outlook, jira = _garantir_sessoes()
-    print("   OK: Outlook e Jira logados.\n")
+    if JIRA_API_ATIVA:
+        print("   OK: Outlook logado. Jira via API (sem aba/login).\n")
+    else:
+        print("   OK: Outlook e Jira logados.\n")
 
     processar(outlook, jira)
 

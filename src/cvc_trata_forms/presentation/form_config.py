@@ -46,6 +46,14 @@ def _ler():
     v["jira_cor"] = g("jira/cor_titulo", "Verde-azulado forte")
     v["jira_prefixo"] = g("jira/categoria_prefixo", "JIRA -")
     v["jira_prefixo_chamado"] = g("jira/prefixo_chamado", "")
+    # Jira via API (usuario + token). Se preenchidos, o app cria/cancela o
+    # chamado pela API (sem abrir a aba do Jira / login SSO).
+    v["jira_usuario"] = g("jira/usuario")
+    v["jira_token"] = g("jira/token")
+    # IDs do portal: sem campo no form, mas PRESERVADOS ao salvar (defaults = GAAR)
+    v["jira_service_desk_id"] = g("jira/service_desk_id", "1984")
+    v["jira_request_type_id"] = g("jira/request_type_id", "7550")
+    v["jira_transicao_cancelar_id"] = g("jira/transicao_cancelar_id", "4")
     v["flx_remetente"] = g("fluxo/remetente_filtro", "Microsoft Forms")
     v["flx_subpasta"] = g("fluxo/subpasta_destino", "Finalizados")
     v["flx_so_nao_lidos"] = g("fluxo/so_nao_lidos", "true")
@@ -99,6 +107,14 @@ def _salvar(vals):
     <categoria_prefixo>{e(vals['jira_prefixo'])}</categoria_prefixo>
     <!-- Opcional: prefixo do codigo do chamado (ex.: GAAR). Vazio = qualquer. -->
     <prefixo_chamado>{e(vals['jira_prefixo_chamado'])}</prefixo_chamado>
+    <!-- API do Jira: com usuario + token, cria/cancela o chamado pela API
+         (sem abrir a aba do Jira / login SSO). Token gerado em
+         id.atlassian.com/manage-profile/security/api-tokens -->
+    <usuario>{e(vals['jira_usuario'])}</usuario>
+    <token>{e(vals['jira_token'])}</token>
+    <service_desk_id>{e(vals['jira_service_desk_id'])}</service_desk_id>
+    <request_type_id>{e(vals['jira_request_type_id'])}</request_type_id>
+    <transicao_cancelar_id>{e(vals['jira_transicao_cancelar_id'])}</transicao_cancelar_id>
   </jira>
 
   <!-- Regras do fluxo -->
@@ -188,11 +204,15 @@ def main():
     # --- Aba Jira ---
     g = aba("Jira")
     linha(g, "URL do chamado", "jira_url")
-    linha(g, "Tipo de solicitação", "jira_tipo")
-    linha(g, "Cor do título", "jira_cor")
     linha(g, "Prefixo do chamado", "jira_prefixo_chamado")
-    ttk.Label(g, text="Prefixo do código do chamado (ex.: GAAR). Opcional — vazio = qualquer.",
-              foreground="#666").pack(anchor="w", pady=(6, 0))
+    ttk.Separator(g, orient="horizontal").pack(fill="x", pady=8)
+    ttk.Label(g, text="API do Jira (recomendado) — cria o chamado direto, "
+                      "sem abrir o navegador:",
+              foreground="#444").pack(anchor="w")
+    linha(g, "Usuário Jira (e-mail)", "jira_usuario")
+    linha(g, "Token Jira", "jira_token", senha=True)
+    ttk.Label(g, text="Gere o token em: id.atlassian.com/manage-profile/security/api-tokens",
+              foreground="#666").pack(anchor="w", pady=(2, 0))
 
     # --- Aba Encaminhamento ---
     g = aba("Encaminhamento")
@@ -231,6 +251,14 @@ def main():
         vals.setdefault("jira_prefixo", dados.get("jira_prefixo", "JIRA -"))
         vals.setdefault("jira_prefixo_chamado",
                         dados.get("jira_prefixo_chamado", ""))
+        vals.setdefault("jira_tipo", dados.get("jira_tipo", "forms"))
+        vals.setdefault("jira_cor", dados.get("jira_cor", "Verde-azulado forte"))
+        vals.setdefault("jira_service_desk_id",
+                        dados.get("jira_service_desk_id", "1984"))
+        vals.setdefault("jira_request_type_id",
+                        dados.get("jira_request_type_id", "7550"))
+        vals.setdefault("jira_transicao_cancelar_id",
+                        dados.get("jira_transicao_cancelar_id", "4"))
         vals.setdefault("enc_sep", dados.get("enc_sep", ""))
         # demo/demo_qtd nao tem campo no form -> preserva o que ja estava no
         # config.xml (mantem o modo DEMO do pacote apos o cadastro inicial).

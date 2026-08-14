@@ -4,7 +4,7 @@
 > **qualquer máquina**, se posicione sobre o projeto sem precisar reconstruir o
 > histórico. Ele viaja pelo git (a pasta de memória do Claude é local de cada máquina).
 >
-> **Última atualização: 2026-08-13** — referente ao HEAD `241e87b` da branch `Projeto_emails`.
+> **Última atualização: 2026-08-14** — **Jira via API (REST)** adicionado sobre o HEAD `241e87b`.
 > Ao concluir qualquer trabalho relevante, **atualize este arquivo** (seções 6 e 7).
 
 ---
@@ -106,6 +106,19 @@ de estilo e o CI fica vermelho mandando e-mail a cada push.
 Cada item aqui custou uma sessão inteira de depuração. Antes de "melhorar" algum desses
 trechos, entenda por que ele está do jeito que está.
 
+**O Jira agora pode ser via API (REST) — mata a parte mais frágil.** Se o `config.xml`
+bloco `<jira>` tem `<usuario>` + `<token>` (constante `JIRA_API_ATIVA`), o app cria e
+cancela o chamado pela **JSM REST API** — SEM abrir a aba do Jira, SEM login SSO, SEM
+formulário/scraping/tela-pequena/Enter-fallback. Módulo: `infrastructure/jira/chamado_api.py`
+(`criar_chamado(dados)->(codigo,link)` e `cancelar_chamado(codigo)`). Parâmetros apurados na
+API e validados ao vivo (GAAR-60..62, incl. DEMO completo): serviceDesk **1984**, requestType
+**7550**, campos obrigatórios só `summary`+`description`, transição de cancelamento id **4**
+("Cancelado pelo Solicitante"). **Token é POR USUÁRIO** (campo no form de config; cada um gera
+o seu em id.atlassian.com/manage-profile/security/api-tokens). **Sem token, cai no fluxo de
+navegador** (`chamado.py` + `login_jira.py` + PASSO 2 do `iniciar_sessoes`), que continua no
+código como **FALLBACK — não apagar**. A restrição "sem API token" do topo é do **Graph
+(e-mail)**, NÃO do Jira: o token do Jira é pessoal e não exige admin.
+
 **A máquina do cliente é um notebook de TELA PEQUENA.** Essa foi a causa raiz de vários bugs
 que na máquina de dev (tela grande) não reproduziam: o OWA é responsivo e reposiciona tudo.
 `iniciar_sessoes._forcar_layout_amplo(page)` força layout desktop via CDP
@@ -182,8 +195,11 @@ use `dist\CVC-Trata-Forms\CVC-Trata-Forms.exe`, copiando o `config.xml` da raiz 
 
 ---
 
-## 5. Estado atual (2026-08-13)
+## 5. Estado atual (2026-08-14)
 
+- **Jira via API (REST) implementado e validado ao vivo** (create+cancel, incl. DEMO completo
+  GAAR-62; sem aba/login do Jira). `ruff`/`pytest 5/5`/`compileall` OK. Fluxo de navegador
+  mantido como fallback. Ver seção 3.
 - **HEAD `241e87b`**, branch `Projeto_emails`, working tree **limpo**, sincronizado com o origin.
 - Tag âncora da entrega: **`entrega-bruna-2026-07-31`**.
 - Pacotes entregues no origin (buildados de `1de2bdf`):
@@ -205,6 +221,11 @@ formulário → Salvar → o app reinicia sozinho e roda o DEMO.
 
 Em ordem de prioridade:
 
+0. **Jira via API — fechamento (feito o essencial, falta validar o .exe e a PRD).** O código
+   está pronto e validado do FONTE. Falta: (a) rodar o **.exe** com token para validar o
+   artefato (CONTEXTO diz que a validação de verdade é pelo exe); (b) o pacote sai em
+   **DRY-RUN** com `<usuario>`/`<token>` do Jira **vazios** (token por usuário, via form) —
+   ao ir para produção, cada usuário informa o token dele no formulário e desmarca DRY-RUN.
 1. ⚠️ **TROCAR A SENHA da conta CVC.** O `CVC-Trata-Forms-TESTE.zip` versionado tem a senha em
    **texto puro** e ela está no histórico do GitHub `caracelli/cvc_Bruna` **para sempre**
    (versionar assim foi decisão explícita do usuário, avisado duas vezes). Com o teste
